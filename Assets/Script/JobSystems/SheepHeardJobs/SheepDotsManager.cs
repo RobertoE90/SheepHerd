@@ -10,17 +10,20 @@ public class SheepDotsManager : MonoBehaviour
 {
     [Header("Herd Config")]
     [SerializeField] private int _sheepCount;
+    [SerializeField] private float _spawnSquareSide;
 
     [Space(20)]
     [SerializeField] Mesh _sheepMesh;
     [SerializeField] Material _sheepMaterial;
 
+    private int _sheepAgentViewLayerInt;
     private NativeArray<Entity> _sheepEntities;
     private EntityManager _entityManager;
 
     private void Awake()
     {
         _entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
+        _sheepAgentViewLayerInt = LayerMask.NameToLayer("SheepAgentViewLayer");
         SpawnHerd();
     }
 
@@ -37,7 +40,8 @@ public class SheepDotsManager : MonoBehaviour
             typeof(RenderBounds),
             typeof(ChunkWorldRenderBounds),
             typeof(PerInstanceCullingTag),
-            typeof(RenderMesh)
+            typeof(RenderMesh),
+            typeof(SheepFollowerComponent)
         });
         
         _sheepEntities = new NativeArray<Entity>(_sheepCount, Allocator.Persistent);
@@ -47,6 +51,7 @@ public class SheepDotsManager : MonoBehaviour
         {
             material = _sheepMaterial,
             mesh = _sheepMesh,
+            //layer = _sheepAgentViewLayerInt,
         };
 
         for (var i = 0; i < _sheepEntities.Length; i++)
@@ -55,10 +60,16 @@ public class SheepDotsManager : MonoBehaviour
             _entityManager.SetComponentData<NonUniformScale>(_sheepEntities[i], new NonUniformScale { Value = Vector3.one });
             _entityManager.SetComponentData<Rotation>(_sheepEntities[i], new Rotation { Value = Quaternion.identity });
             _entityManager.SetComponentData<Translation>(
-                _sheepEntities[i], 
-                new Translation { 
-                    Value = new Vector3(Random.value - 0.5f, 0, Random.value - 0.5f) * 10 
+                _sheepEntities[i],
+                new Translation
+                {
+                    Value = new Vector3(Random.value - 0.5f, 0, Random.value - 0.5f) * _spawnSquareSide
                 });
+
+
+            _entityManager.SetComponentData<SheepFollowerComponent>(
+                _sheepEntities[i], 
+                new SheepFollowerComponent { FollowIndex = (int)Random.Range(0, _sheepEntities.Length) });
         }
     }
 
