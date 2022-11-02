@@ -1,7 +1,10 @@
 using Unity.Entities;
 
-public struct SheepFollowerComponent : IComponentData
+public struct SheepComponentDataEntity : IComponentData
 {
-    public int FollowIndex;
-    public float DistanceToFollowed;
+    public int InputTargetIndex;
+    public int UpdateGroupId;
+    public float LastStateChangeTime;
+    public int CurrentState;
+    public int StateExtraInfo;
 }

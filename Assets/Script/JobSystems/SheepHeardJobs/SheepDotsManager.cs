@@ -1,9 +1,11 @@
 using System.Threading.Tasks;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
 using Unity.Rendering;
 using Unity.Transforms;
 using UnityEngine;
+
 
 
 public class SheepDotsManager : MonoBehaviour
@@ -16,16 +18,63 @@ public class SheepDotsManager : MonoBehaviour
     [SerializeField] Mesh _sheepMesh;
     [SerializeField] Material _sheepMaterial;
 
-    private int _sheepAgentViewLayerInt;
+
+    [Header("External references")]
+    [SerializeField] private BaseEntityCameraBaker[] _cameraBakers;
+
     private NativeArray<Entity> _sheepEntities;
     private EntityManager _entityManager;
+
+    private Entity _globalParamsEntity;
+    private const int RANDOM_VALUES_COUNT = 10;
 
     private void Awake()
     {
         _entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
-        _sheepAgentViewLayerInt = LayerMask.NameToLayer("SheepAgentViewLayer");
+        SpawnGlobalParamsEntity();
         SpawnHerd();
+        
+        foreach(var baker in _cameraBakers)
+            baker.Initialize(_sheepCount, Vector2.one * _spawnSquareSide, transform.position, transform.rotation);
+       
+        var entitiesInputManager = InputEntityManager.Instance;
+        if (entitiesInputManager != null)
+            entitiesInputManager.SetInputReferenceMatrix(transform.localToWorldMatrix);
     }
+
+    private void SpawnGlobalParamsEntity()
+    {
+        _globalParamsEntity = _entityManager.CreateEntity(new ComponentType[]{
+            typeof(GlobalParams),
+        });
+        _entityManager.SetComponentData<GlobalParams>(_globalParamsEntity, new GlobalParams
+        {
+            MaxGroups = 30
+        });
+
+        _entityManager.AddBuffer<RandomData>(_globalParamsEntity);
+    }
+
+    private void Update()
+    {
+        var dynamicBuffer = _entityManager.GetBuffer<RandomData>(_globalParamsEntity);
+        if (dynamicBuffer.Length != RANDOM_VALUES_COUNT)
+        {
+            for (var i = dynamicBuffer.Length; i < RANDOM_VALUES_COUNT; i++)
+            {
+                dynamicBuffer.Add(new RandomData
+                {
+                    Value = UnityEngine.Random.value
+                });
+            }
+            return;
+        }
+        var inputBuffer = dynamicBuffer.Reinterpret<float>();
+
+        for (var i = 0; i < inputBuffer.Length; i++)
+            inputBuffer[i] = UnityEngine.Random.value;
+    }
+
 
     private async void SpawnHerd()
     {
@@ -41,9 +90,9 @@ public class SheepDotsManager : MonoBehaviour
             typeof(ChunkWorldRenderBounds),
             typeof(PerInstanceCullingTag),
             typeof(RenderMesh),
-            typeof(SheepFollowerComponent)
+            typeof(SheepComponentDataEntity)
         });
-        
+
         _sheepEntities = new NativeArray<Entity>(_sheepCount, Allocator.Persistent);
         _entityManager.CreateEntity(archetype, _sheepEntities);
 
@@ -51,7 +100,11 @@ public class SheepDotsManager : MonoBehaviour
         {
             material = _sheepMaterial,
             mesh = _sheepMesh,
-            //layer = _sheepAgentViewLayerInt,
+        };
+
+        var sheepBounds = new AABB {
+            Center = new float3(0f, 0.5f, 0f),
+            Extents = new float3(0.6f, 1f, 1f)
         };
 
         for (var i = 0; i < _sheepEntities.Length; i++)
@@ -63,13 +116,19 @@ public class SheepDotsManager : MonoBehaviour
                 _sheepEntities[i],
                 new Translation
                 {
-                    Value = new Vector3(Random.value - 0.5f, 0, Random.value - 0.5f) * _spawnSquareSide
+                    Value = new Vector3(UnityEngine.Random.value - 0.5f, 0, UnityEngine.Random.value - 0.5f) * _spawnSquareSide
                 });
 
+            _entityManager.SetComponentData<SheepComponentDataEntity>(
+                _sheepEntities[i],
+                new SheepComponentDataEntity
+                {
+                    InputTargetIndex = UnityEngine.Random.Range(0, 3),
+                    UpdateGroupId = (i % 10) * 3
+                }); ; ;
 
-            _entityManager.SetComponentData<SheepFollowerComponent>(
-                _sheepEntities[i], 
-                new SheepFollowerComponent { FollowIndex = (int)Random.Range(0, _sheepEntities.Length) });
+            _entityManager.SetComponentData<RenderBounds>(_sheepEntities[i], new RenderBounds { Value = sheepBounds });
+
         }
     }
 
