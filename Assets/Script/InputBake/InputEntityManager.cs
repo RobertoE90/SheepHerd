@@ -12,6 +12,7 @@ public class InputEntityManager : MonoBehaviour
     [Space(10)]
     [SerializeField] private Transform[] _repulseTargets;
     public int InputRepulseCount => _repulseTargets.Length;
+    private Vector3[] _repulseLastFramePositions;
 
     [Space(20)]
     [SerializeField] private ComputeShader _bakeComputeShader;
@@ -146,11 +147,15 @@ public class InputEntityManager : MonoBehaviour
         var repulseData = new InputRepulseData[_repulseTargets.Length];
         for (var i = 0; i < _repulseTargets.Length; i++)
         {
+            float repulseSpeed = ComputeRepulseInputSpeed(i);
+            repulseSpeed /= _bakeSideSize;
+            repulseSpeed = Mathf.Clamp(0f, repulseSpeed, 0.3f);
+
             repulseData[i] = new InputRepulseData
             {
                 UvPosition = WorldToTextureUv(_repulseTargets[i].position),
                 ColorChannelId = InputIndexToColorChannelCode(i),
-                Width = 0.10f,
+                Width = repulseSpeed,
                 Strengh = 1.0f
             };
         }
@@ -168,6 +173,22 @@ public class InputEntityManager : MonoBehaviour
 
         inputAttractBufferData.Release();
         inputRepulsionBufferData.Release();
+
+        if (_repulseLastFramePositions == null)
+            _repulseLastFramePositions = new Vector3[_repulseTargets.Length];
+
+        for(var i = 0; i < _repulseTargets.Length; i++)
+        {
+            _repulseLastFramePositions[i] = _repulseTargets[i].position;
+        }
+    }
+    private float ComputeRepulseInputSpeed(int index)
+    {
+        if(_repulseLastFramePositions == null)
+            return 0f;
+
+        var delta = Vector3.Distance(_repulseTargets[index].position, _repulseLastFramePositions[index]);
+        return delta / Time.deltaTime;
     }
 
     public void SetInputReferenceMatrix(Matrix4x4 inputReference)

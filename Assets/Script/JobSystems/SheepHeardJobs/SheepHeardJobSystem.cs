@@ -259,7 +259,7 @@ public class SheepHeardJobSystem : SystemBase
 
             if (_codeIterator == sheep.UpdateGroupId)
             {
-                var normalizedTargetDirection = math.normalizesafe(_inputsArray[sheep.InputTargetIndex].LocalInputPosition - translation.Value.xz);
+                var normalizedTargetDirection = math.normalizesafe(_inputsArray[sheep.InputAttrackIndex].LocalInputPosition - translation.Value.xz);
                 var lookAtRotation = HorizontalLookAtRotation(normalizedTargetDirection);
                 
                 var positiveNormalizedSearchRot = math.mul(lookAtRotation, quaternion.EulerXYZ(0, _rotationStepSpread, 0));

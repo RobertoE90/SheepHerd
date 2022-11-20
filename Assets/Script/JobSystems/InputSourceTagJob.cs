@@ -145,21 +145,36 @@ public class InputSourceTagJob : SystemBase
             {
                 var sheep = sheeps[i];
                 var idMapIndex = EntityPositionToIdMapIndex(translations[i].Value);
-                /*
-                var idColor = new int4()
+                
+                bool sheepInfoChanged = false;
+                var inputAttrackId = InputEntityManager.ColorCodeToIndex(_inputIdMap[idMapIndex + 2]); //blue channel for attract group id
+                if (sheep.InputAttrackIndex != inputAttrackId)
                 {
-                    x = _inputIdMap[idMapIndex],
-                    y = _inputIdMap[idMapIndex + 1],
-                    z = _inputIdMap[idMapIndex + 2],
-                    w = _inputIdMap[idMapIndex + 3]
-                };
-                */
-                var inputId = InputEntityManager.ColorCodeToIndex(_inputIdMap[idMapIndex + 2]); //blue channel for attract group id
-                if (sheep.InputTargetIndex != inputId)
-                {
-                    sheep.InputTargetIndex = inputId;
-                    sheeps[i] = sheep;
+                    sheep.InputAttrackIndex = inputAttrackId;
+                    sheepInfoChanged = true;
                 }
+
+                var inputRepulseStrength = _inputIdMap[idMapIndex] / 255f; //red channel for repulse strenght
+                var inputRepulseId = -1;
+                if (inputRepulseStrength > 0.05) //apply repulse if is over threshold
+                {
+                    if (math.abs(inputRepulseStrength - sheep.InputRepulseStrenght) > 0.1f)
+                    {
+                        sheep.InputRepulseStrenght = inputRepulseStrength;
+                        sheepInfoChanged = true;
+                    }
+
+                    inputRepulseId = InputEntityManager.ColorCodeToIndex(_inputIdMap[idMapIndex + 1]); //green channel for repulse group id
+                }
+
+                if (inputRepulseId != sheep.InputRepulseIndex)
+                {
+                    sheep.InputRepulseIndex = inputRepulseId;
+                    sheepInfoChanged = true;
+                }
+                
+                if (sheepInfoChanged)
+                    sheeps[i] = sheep;
             }
         }
 

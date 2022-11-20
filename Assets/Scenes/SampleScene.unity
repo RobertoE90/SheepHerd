@@ -153,7 +153,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _sheepCount: 50000
-  _spawnSquareSide: 300
+  _spawnSquareSide: 400
   _sheepMesh: {fileID: -321270947451227426, guid: 084a6772ad5fea64d8a9159f658e0121, type: 3}
   _sheepMaterial: {fileID: 2100000, guid: 8266e1a19b69a1d4b825935e0b377686, type: 2}
   _cameraBakers:
