@@ -1,0 +1,19 @@
+#pragma kernel TextureDecay
+
+RWTexture2D<float4> CameraTexture;
+RWTexture2D<float4> Cache;
+uniform float _Decay;
+uniform float _TraceDecay;
+
+[numthreads(4,4,1)]
+void TextureDecay(uint3 id : SV_DispatchThreadID)
+{
+    Cache[id.xy] = CameraTexture[id.xy] + Cache[id.xy] * _TraceDecay;
+    float traceValue = Cache[id.xy].x * _Decay;
+    
+    CameraTexture[id.xy] = float4(
+        CameraTexture[id.xy].x + traceValue, 
+        0,
+        traceValue * 3 - CameraTexture[id.xy].x,
+        1);
+}

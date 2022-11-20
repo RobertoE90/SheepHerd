@@ -3,11 +3,14 @@ using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Transforms;
+using UnityEngine;
 
 public class CopySheepTransformSystem : SystemBase
 {
     private EntityQuery _jobQuery;
     private EntityQuery _sheepsQuery;
+    private int _currentChunkExecutionCode;
+    private int _chunkExecutionLoopCount;
 
     protected override void OnStartRunning()
     {
@@ -15,7 +18,7 @@ public class CopySheepTransformSystem : SystemBase
         {
             typeof(Translation),
             typeof(Rotation),
-            typeof(IndexReferenceComponent)
+            typeof(CopyTransformReferenceComponent)
         });
 
         _sheepsQuery = GetEntityQuery(new ComponentType[]
@@ -23,6 +26,9 @@ public class CopySheepTransformSystem : SystemBase
             typeof(LocalToWorld),
             typeof(SheepComponentDataEntity)
         });
+
+        _currentChunkExecutionCode = 0;
+        _chunkExecutionLoopCount = 5;
     }
 
     protected override void OnUpdate()
@@ -32,12 +38,17 @@ public class CopySheepTransformSystem : SystemBase
         var job = new CopyTransformJob(
             GetComponentTypeHandle<Translation>(),
             GetComponentTypeHandle<Rotation>(),
-            GetComponentTypeHandle<IndexReferenceComponent>(),
-            referencesTransforms);
+            GetComponentTypeHandle<CopyTransformReferenceComponent>(),
+            referencesTransforms,
+            _currentChunkExecutionCode,
+            _chunkExecutionLoopCount
+            );
 
         Dependency = job.ScheduleParallel(_jobQuery);
         Dependency.Complete();
-
+        _currentChunkExecutionCode++;
+        if (_currentChunkExecutionCode == _chunkExecutionLoopCount)
+            _currentChunkExecutionCode = 0;
         referencesTransforms.Dispose();
     }
 
@@ -46,41 +57,61 @@ public class CopySheepTransformSystem : SystemBase
     {
         public ComponentTypeHandle<Translation> _translationType;
         public ComponentTypeHandle<Rotation> _rotationType;
-        public ComponentTypeHandle<IndexReferenceComponent> _indexReferenceType;
+        public ComponentTypeHandle<CopyTransformReferenceComponent> _indexReferenceType;
         [ReadOnly] private NativeArray<LocalToWorld> _transformArray;
-        
+        private int _chunkExcecutionCode;
+        private int _executionLoopLength;
 
         public CopyTransformJob(
             ComponentTypeHandle<Translation> t,
             ComponentTypeHandle<Rotation> r,
-            ComponentTypeHandle<IndexReferenceComponent> indexRefType,
-            NativeArray<LocalToWorld> transformArray)
+            ComponentTypeHandle<CopyTransformReferenceComponent> indexRefType,
+            NativeArray<LocalToWorld> transformArray,
+            int chunkExecutionCode,
+            int executionLoopLength)
         {
             _translationType = t;
             _rotationType = r;
             _indexReferenceType = indexRefType;
             _transformArray = transformArray;
+            _chunkExcecutionCode = chunkExecutionCode;
+            _executionLoopLength = executionLoopLength;
         }
 
         [BurstCompile]
-        public void Execute(ArchetypeChunk batchInChunk, int indexOfFirstEntityInQuery)
+        public void Execute(ArchetypeChunk batchInChunk, int batchIndex)
         {
             NativeArray<Translation> translations = batchInChunk.GetNativeArray(this._translationType);
             NativeArray<Rotation> rotations = batchInChunk.GetNativeArray(this._rotationType);
-            NativeArray< IndexReferenceComponent > indexRefs = batchInChunk.GetNativeArray(this._indexReferenceType);
+            NativeArray<CopyTransformReferenceComponent> indexRefs = batchInChunk.GetNativeArray(this._indexReferenceType);
+
+            //Debug.Log(batchInChunk.Count);
+
+            //if (batchIndex % _executionLoopLength != _chunkExcecutionCode)
+              //  return;
 
             for (int i = 0; i < batchInChunk.Count; ++i)
             {
-                var t = translations[i];
-                var r = rotations[i];
+                if (i % _executionLoopLength != _chunkExcecutionCode)
+                    continue;
 
                 var referenceMatrix = _transformArray[indexRefs[i].ReferenceIndex];
-                t.Value = math.mul(referenceMatrix.Value, new float4(0, 0, 0, 1)).xyz;
-                r.Value = referenceMatrix.Rotation;
+                
+                if (indexRefs[i].CopyTranslation)
+                {
+                    var t = translations[i];
+                    t.Value = math.mul(referenceMatrix.Value, new float4(0, 0, 0, 1)).xyz;
+                    translations[i] = t;
+                }
 
-                translations[i] = t;
-                rotations[i] = r;
+                if (indexRefs[i].CopyRotation)
+                {
+                    var r = rotations[i];
+                    r.Value = referenceMatrix.Rotation;
+                    rotations[i] = r;
+                }
             }
+
         }
     }
 }

@@ -12,12 +12,15 @@ public class MovementHeatBakeController : BaseEntityCameraBaker
     public override void Initialize(int referencesCount, Vector2 bakeArea, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
     {
         base.Initialize(referencesCount, bakeArea, centerWorldPosition, centerWorldRotation);
+        _isInitialized = false;
 
         var heatDecalGenerator = new MoveHeatDecalGenerator(_decalImageSideSize, _decalImageSideSize);
         _bakeMaterial.SetTexture("_BaseMap", heatDecalGenerator.BakedTexture);
 
         SpawnHeatMovementBakers(referencesCount);
         SpawnHeatBakeBufferEntity(bakeArea, _bakeTexture);
+
+        _isInitialized = true;
     }
 
     private void SpawnHeatMovementBakers(int referencesCount)
@@ -30,7 +33,7 @@ public class MovementHeatBakeController : BaseEntityCameraBaker
             typeof(Scale),
             typeof(RenderBounds),
             typeof(RenderMesh),
-            typeof(IndexReferenceComponent)
+            typeof(CopyTransformReferenceComponent)
         });
 
         var heatBakersEntities = new NativeArray<Entity>(referencesCount, Allocator.Persistent);
@@ -53,7 +56,13 @@ public class MovementHeatBakeController : BaseEntityCameraBaker
         {
             entityManager.SetSharedComponentData<RenderMesh>(heatBakersEntities[i], meshComponent);
             entityManager.SetComponentData<Scale>(heatBakersEntities[i], new Scale { Value = _decalImageSideSize });
-            entityManager.SetComponentData<IndexReferenceComponent>(heatBakersEntities[i], new IndexReferenceComponent { ReferenceIndex = i });
+            entityManager.SetComponentData<CopyTransformReferenceComponent>(
+                heatBakersEntities[i], 
+                new CopyTransformReferenceComponent { 
+                    ReferenceIndex = i,
+                    CopyTranslation = true,
+                    CopyRotation = true
+                });
             entityManager.SetComponentData<RenderBounds>(
                 heatBakersEntities[i], 
                 new RenderBounds { Value = bounds });
@@ -66,16 +75,17 @@ public class MovementHeatBakeController : BaseEntityCameraBaker
     {
         var entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
         var archetype = entityManager.CreateArchetype(new ComponentType[] {
-            typeof(HeatMapSharedComponentData),
+            typeof(PhysicalSizeTexture),
         });
 
         var heatMapBufferEntity = entityManager.CreateEntity(archetype);
-        entityManager.SetSharedComponentData<HeatMapSharedComponentData>(
+        entityManager.SetSharedComponentData<PhysicalSizeTexture>(
             heatMapBufferEntity,
-            new HeatMapSharedComponentData
+            new PhysicalSizeTexture
             {
-                PhysicalRectSize = bakeRectSize,
-                HeatTexture = bakeTexture,
+                PhysicalTextureSize = bakeRectSize,
+                TextureReference = bakeTexture,
+                Type = TextureTypes.MOVE_HEAT_TEXTURE
             });
 
     }

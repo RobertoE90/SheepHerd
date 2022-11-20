@@ -1,0 +1,85 @@
+#pragma kernel InputAttractBake
+
+struct InputRepulseData
+{
+    float colorChannelId;
+    float2 uvPosition;
+    float width;
+    float strengh;
+};
+
+struct InputAttractData
+{
+    float colorChannelId;
+    float2 uvPosition;
+};
+
+RWTexture2D<float4> InputTexture;
+int TextureWidth;
+int TextureHeight;
+
+StructuredBuffer<InputRepulseData> InputRepulseDataBuffer;
+int InputRepulseBufferCount = 0;
+
+StructuredBuffer<InputAttractData> InputAttractDataBuffer;
+int InputAttractBufferCount = 0;
+
+float ComputeAttractValue(float2 pixelUV) {
+    float maxDistance = 3.0; //distance is computed with the uvpos
+    int maxIndex = 0;
+
+    for (int i = 0; i < InputAttractBufferCount; i++) {
+        float2 inputPoint = InputAttractDataBuffer[i].uvPosition;
+        float xPow = pixelUV.x - inputPoint.x;
+        float yPow = pixelUV.y - inputPoint.y;
+
+        xPow = xPow * xPow;
+        yPow = yPow * yPow;
+
+        float currentDistance = xPow + yPow;
+
+        if (currentDistance < maxDistance) {
+            maxDistance = currentDistance;
+            maxIndex = i;
+        }
+    }
+
+    return InputAttractDataBuffer[maxIndex].colorChannelId;
+}
+
+float GetInputAreaValue(float2 inputUV, float2 pixelUV, float expansionValue) //uv 0-1
+{
+    float dist = abs(distance(inputUV, pixelUV));
+    float areaValue = 1.0 - (dist / expansionValue);
+    return areaValue;
+}
+
+[numthreads(4,4,1)]
+void InputAttractBake(uint3 id : SV_DispatchThreadID)
+{
+    float2 pixelUv = float2(id.x / (float)TextureWidth, id.y / (float)TextureHeight);
+
+    float attractCode = ComputeAttractValue(pixelUv);
+
+    //get repulse values 
+    //float repulseCode = ComputeRepulseValue(id.xy, pixelUv);
+    float repulseHeatValue = InputTexture[id.xy].x;
+    float repulseId = InputTexture[id.xy].y;
+    for (int i = 0; i < InputRepulseBufferCount; i++) {
+        InputRepulseData repulseData = InputRepulseDataBuffer[i];
+        float areaValue = GetInputAreaValue(repulseData.uvPosition, pixelUv, repulseData.width);
+        repulseHeatValue = max(repulseHeatValue, areaValue);
+
+        float idValue = lerp(0, repulseData.colorChannelId, clamp(0, 1, areaValue * 10000));
+        if (idValue > 0.001) {
+            repulseId = idValue;
+        }
+    }
+
+    repulseHeatValue = repulseHeatValue - 0.01;
+    //InputTexture[pixelCoord].x = repulseValue;
+
+    InputTexture[id.xy] = float4(repulseHeatValue, repulseId, attractCode, 1.0);
+    //InputTexture[id.xy] = float4(0.0, repulseId, 0.0, 1.0);
+}
+

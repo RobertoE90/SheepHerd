@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -13,19 +14,33 @@ public class BaseEntityCameraBaker : MonoBehaviour
     [Space(20)]
     [Header("Bake config")]
     [SerializeField] protected string _bakeLayerName;
-    [SerializeField] protected int _bakeTexturePPU = 5;
+    [SerializeField] private bool writeToBakedTexture;
+    [SerializeField] protected int _bakeTexturePPU = 2;
     [SerializeField] protected int CAMERA_DEPTH = 10;
 
 
     protected RenderTexture _bakeTexture;
+    public RenderTexture BakeTexture => _bakeTexture;
+
+
     protected int _bakeLayerId;
 
     public int BakeLayerId => _bakeLayerId;
 
+    protected bool _isInitialized = false;
+    public bool IsInitialized => _isInitialized;
+
+    protected Vector2Int _textureSize;
+    public Vector2Int TextureSize => _textureSize;
+
+    public event Action InitializedAction;
+
     public virtual void Initialize(int referencesCount, Vector2 bakeArea, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
     {
-        var textureSize = new Vector2Int((int)(bakeArea.x * _bakeTexturePPU), (int)(bakeArea.y * _bakeTexturePPU));
-        _bakeTexture = new RenderTexture(textureSize.x, textureSize.y, 0, RenderTextureFormat.ARGB32, 0);
+        _textureSize = new Vector2Int((int)(bakeArea.x * _bakeTexturePPU), (int)(bakeArea.y * _bakeTexturePPU));
+        _bakeTexture = new RenderTexture(_textureSize.x, _textureSize.y, 0, RenderTextureFormat.ARGB32, 0);
+        _bakeTexture.enableRandomWrite = writeToBakedTexture;
+        _bakeTexture.Create();
 
         _bakeDebugMeshRenderer.transform.localScale = new Vector3(bakeArea.x, 1, bakeArea.y);
 
@@ -44,5 +59,14 @@ public class BaseEntityCameraBaker : MonoBehaviour
         
         _bakeLayerId = LayerMask.NameToLayer(_bakeLayerName);
         _bakeCamera.cullingMask = 1 << _bakeLayerId;
+
+        _isInitialized = true;
+        InitializedAction?.Invoke();
+    }
+
+    private void OnDestroy()
+    {
+        _bakeTexture.Release();
+        Destroy(_bakeTexture);
     }
 }

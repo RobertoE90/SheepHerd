@@ -7,16 +7,15 @@ using UnityEngine;
 
 public class PositionIDBakeController : BaseEntityCameraBaker
 {
-    private Vector2Int _textureSize;
+    private static int _ppuCopy;
+    public static int BakeTexturePPU => _ppuCopy;
 
     public override void Initialize(int referencesCount, Vector2 bakeArea, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
     {
         base.Initialize(referencesCount, bakeArea, centerWorldPosition, centerWorldRotation);
-        
-        _textureSize = new Vector2Int((int)(bakeArea.x * _bakeTexturePPU), (int)(bakeArea.y * _bakeTexturePPU));
-        
         SpawnPositionIdBakers(referencesCount);
-        //SpawnHeatBakeBufferEntity(bakeArea, bakeTexture);
+        _ppuCopy = _bakeTexturePPU;
+        SpawnEntityIdTextureBakeEntity(bakeArea, _bakeTexture);
     }
 
     private void SpawnPositionIdBakers(int referencesCount)
@@ -30,7 +29,7 @@ public class PositionIDBakeController : BaseEntityCameraBaker
             typeof(RenderBounds),
             typeof(RenderMesh),
             typeof(URPMaterialPropertyBaseColor),
-            typeof(IndexReferenceComponent)
+            typeof(CopyTransformReferenceComponent)
         });
 
         var bakerEntities = new NativeArray<Entity>(referencesCount, Allocator.Persistent);
@@ -58,43 +57,45 @@ public class PositionIDBakeController : BaseEntityCameraBaker
                 bakerEntities[i],
                 new RenderBounds { Value = bounds });
 
+            var iPrimaryAxis = (int)(i / 255f);
+            var iSecoundarySeAxis = i % 255f;
+
             entityManager.SetComponentData<URPMaterialPropertyBaseColor>(
                 bakerEntities[i],
                 new URPMaterialPropertyBaseColor
                 {
-                    Value = new float4(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.value, 1f)
+                    Value = new float4(1f, iPrimaryAxis / 255f, iSecoundarySeAxis / 255f, 1f)
                 });
 
-            entityManager.SetComponentData<IndexReferenceComponent>(
+            entityManager.SetComponentData<CopyTransformReferenceComponent>(
                 bakerEntities[i],
-                new IndexReferenceComponent
+                new CopyTransformReferenceComponent
                 {
-                    ReferenceIndex = i
+                    ReferenceIndex = i,
+                    CopyTranslation = true,
+                    CopyRotation = true
                 });
-
         }
-
         bakerEntities.Dispose();
     }
 
-    /*
-    private void SpawnHeatBakeBufferEntity(float2 bakeRectSize, RenderTexture bakeTexture)
+
+    private void SpawnEntityIdTextureBakeEntity(float2 bakeRectSize, RenderTexture bakeTexture)
     {
         var entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
         var archetype = entityManager.CreateArchetype(new ComponentType[] {
-            typeof(HeatMapSharedComponentData),
+            typeof(PhysicalSizeTexture),
         });
 
         var heatMapBufferEntity = entityManager.CreateEntity(archetype);
-        entityManager.SetSharedComponentData<HeatMapSharedComponentData>(
+        entityManager.SetSharedComponentData<PhysicalSizeTexture>(
             heatMapBufferEntity,
-            new HeatMapSharedComponentData
+            new PhysicalSizeTexture
             {
-                PhysicalRectSize = bakeRectSize,
-                HeatTexture = bakeTexture,
+                PhysicalTextureSize = bakeRectSize,
+                TextureReference = bakeTexture,
+                Type = TextureTypes.ENTITY_ID_TEXTURE
             });
 
     }
-    */
-
 }

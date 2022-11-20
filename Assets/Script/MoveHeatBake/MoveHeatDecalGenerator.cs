@@ -16,9 +16,9 @@ public class MoveHeatDecalGenerator
     private Color _zeroColor = Color.black;
     private Color _oneColor = Color.red;
 
-    private const int MAX_HEAT_VALUE = 60;
-    private const int FORWARD_GRADIENT_STEP = 20;
-    private const int SIDES_GRADIENT_STEP = 40;
+    private const int MAX_HEAT_VALUE = 30;
+    private const int FORWARD_GRADIENT_STEP = 10;
+    private const int SIDES_GRADIENT_STEP = 20;
 
 
 

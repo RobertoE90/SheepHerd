@@ -4,18 +4,26 @@ using Unity.Mathematics;
 using UnityEngine;
 
 
-public struct HeatMapSharedComponentData: ISharedComponentData, IEquatable<HeatMapSharedComponentData> 
+public struct PhysicalSizeTexture: ISharedComponentData, IEquatable<PhysicalSizeTexture> 
 {
-    public float2 PhysicalRectSize;
-    public RenderTexture HeatTexture;
+    public float2 PhysicalTextureSize;
+    public RenderTexture TextureReference;
+    public TextureTypes Type;
 
-    public bool Equals(HeatMapSharedComponentData other)
+    public bool Equals(PhysicalSizeTexture other)
     {
-        return other.HeatTexture.Equals(HeatTexture);
+        return other.TextureReference.Equals(TextureReference);
     }
 
     public override int GetHashCode()
     {
-        return HeatTexture.GetHashCode();
+        return TextureReference.GetHashCode();
     }
+}
+
+public enum TextureTypes
+{
+    MOVE_HEAT_TEXTURE,
+    ENTITY_ID_TEXTURE,
+    INPUT_BAKE_TEXTURE
 }

@@ -39,7 +39,10 @@ public class SheepDotsManager : MonoBehaviour
        
         var entitiesInputManager = InputEntityManager.Instance;
         if (entitiesInputManager != null)
+        {
             entitiesInputManager.SetInputReferenceMatrix(transform.localToWorldMatrix);
+            entitiesInputManager.Initialize(_spawnSquareSide);
+        }
     }
 
     private void SpawnGlobalParamsEntity()
@@ -49,7 +52,7 @@ public class SheepDotsManager : MonoBehaviour
         });
         _entityManager.SetComponentData<GlobalParams>(_globalParamsEntity, new GlobalParams
         {
-            MaxGroups = 30
+            MaxGroups = 100
         });
 
         _entityManager.AddBuffer<RandomData>(_globalParamsEntity);
@@ -123,9 +126,9 @@ public class SheepDotsManager : MonoBehaviour
                 _sheepEntities[i],
                 new SheepComponentDataEntity
                 {
-                    InputTargetIndex = UnityEngine.Random.Range(0, 3),
-                    UpdateGroupId = (i % 10) * 3
-                }); ; ;
+                    InputTargetIndex = UnityEngine.Random.Range(0, InputEntityManager.Instance.InputAttractCount),
+                    UpdateGroupId = (i % 100)
+                });
 
             _entityManager.SetComponentData<RenderBounds>(_sheepEntities[i], new RenderBounds { Value = sheepBounds });
 
