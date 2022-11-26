@@ -18,7 +18,8 @@ public class InputEntityManager : MonoBehaviour
     [SerializeField] private ComputeShader _bakeComputeShader;
     [SerializeField] private Renderer _debugSurfaceRenderer;
 
-    private Entity _inputEntity;
+    private Entity _inputAttractEntity;
+    private Entity _inputRepulseEntity;
     private EntityManager _entityManager;
     private Matrix4x4 _originTransform;
 
@@ -47,10 +48,16 @@ public class InputEntityManager : MonoBehaviour
     private void Awake()
     {
         _entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
-        _inputEntity = _entityManager.CreateEntity();
+        _inputAttractEntity = _entityManager.CreateEntity();
+        _entityManager.AddComponent(_inputAttractEntity, typeof(InputAttractTagComponent));
+        _entityManager.AddBuffer<InputPoint>(_inputAttractEntity);
+
+        _inputRepulseEntity = _entityManager.CreateEntity();
+        _entityManager.AddComponent(_inputRepulseEntity, typeof(InputRepulseTagComponent));
+        _entityManager.AddBuffer<InputPoint>(_inputRepulseEntity);
+
         _originTransform = Matrix4x4.identity;
 
-        var dynamicBuffer = _entityManager.AddBuffer<InputPoint>(_inputEntity);
     }
 
     public void Initialize(float bakeSideSize)
@@ -93,12 +100,9 @@ public class InputEntityManager : MonoBehaviour
 
     }
 
-    private void Update()
+    private ComputeBuffer ProcessInputAttractData()
     {
-        if (_attractTargets == null || _attractTargets.Length == 0 || _inputBakeTexture == null)
-            return;
-
-        var dynamicBuffer = _entityManager.GetBuffer<InputPoint>(_inputEntity);
+        var dynamicBuffer = _entityManager.GetBuffer<InputPoint>(_inputAttractEntity);
         if (dynamicBuffer.Length != _attractTargets.Length)
         {
             for (var i = dynamicBuffer.Length; i < _attractTargets.Length; i++)
@@ -110,19 +114,19 @@ public class InputEntityManager : MonoBehaviour
             }
         }
 
-        var inputBuffer = dynamicBuffer.Reinterpret<float2>();
+        var inputBufferAsArray = dynamicBuffer.Reinterpret<float2>();
 
-        if(inputBuffer.Length != _attractTargets.Length)
+        if (inputBufferAsArray.Length != _attractTargets.Length)
         {
             Debug.LogError("Buffer different from target size");
-            return;
+            return new ComputeBuffer(0, 0);
         }
 
-        var attractData = new InputAttractData[inputBuffer.Length];
-        for (var i = 0; i < inputBuffer.Length; i++)
+        var attractData = new InputAttractData[inputBufferAsArray.Length];
+        for (var i = 0; i < inputBufferAsArray.Length; i++)
         {
             var positionValue = WorldToInputSpace(_attractTargets[i].position);
-            inputBuffer[i] = positionValue;
+            inputBufferAsArray[i] = positionValue;
 
             attractData[i] = new InputAttractData
             {
@@ -130,26 +134,47 @@ public class InputEntityManager : MonoBehaviour
                 ColorChannelId = InputIndexToColorChannelCode(i)
             };
         }
-        
-        var inputBakeKernel = _bakeComputeShader.FindKernel("InputAttractBake");
-        _bakeComputeShader.SetTexture(inputBakeKernel, "InputTexture", _inputBakeTexture);
 
-        //data buffers
         var inputAttractBufferData = new ComputeBuffer(attractData.Length, sizeof(float) * 3);
         inputAttractBufferData.SetData(attractData);
-        _bakeComputeShader.SetBuffer(inputBakeKernel, "InputAttractDataBuffer", inputAttractBufferData);
+        return inputAttractBufferData;
+    }
 
-        _bakeComputeShader.SetInt("TextureWidth", _inputBakeTexture.width);
-        _bakeComputeShader.SetInt("TextureHeight", _inputBakeTexture.height);
+    private bool ProcessInputRepulseData(out ComputeBuffer cb)
+    {
+        if(_repulseTargets.Length == 0)
+        {
+           cb = new ComputeBuffer(1, 4);
+           return false;
+        }
+        var dynamicBuffer = _entityManager.GetBuffer<InputPoint>(_inputRepulseEntity);
+        if (dynamicBuffer.Length != _repulseTargets.Length)
+        {
+            for (var i = dynamicBuffer.Length; i < _repulseTargets.Length; i++)
+            {
+                dynamicBuffer.Add(new InputPoint
+                {
+                    LocalInputPosition = new float2(0, 0),
+                });
+            }
+        }
 
-        _bakeComputeShader.SetInt("InputAttractBufferCount", attractData.Length);
+        var inputBufferAsArray = dynamicBuffer.Reinterpret<float2>();
+
+        if (inputBufferAsArray.Length != _repulseTargets.Length)
+        {
+            Debug.LogError("Buffer different from target size");
+            cb = new ComputeBuffer(1, 4);
+            return false;
+        }
 
         var repulseData = new InputRepulseData[_repulseTargets.Length];
         for (var i = 0; i < _repulseTargets.Length; i++)
         {
+            inputBufferAsArray[i] = WorldToInputSpace(_repulseTargets[i].position);
             float repulseSpeed = ComputeRepulseInputSpeed(i);
             repulseSpeed /= _bakeSideSize;
-            repulseSpeed = Mathf.Clamp(0f, repulseSpeed, 0.3f);
+            repulseSpeed = Mathf.Clamp(0f, repulseSpeed * 2, 0.2f);
 
             repulseData[i] = new InputRepulseData
             {
@@ -159,10 +184,33 @@ public class InputEntityManager : MonoBehaviour
                 Strengh = 1.0f
             };
         }
-        var inputRepulsionBufferData = new ComputeBuffer(repulseData.Length, sizeof(float) * 5);
-        inputRepulsionBufferData.SetData(repulseData);
-        _bakeComputeShader.SetBuffer(inputBakeKernel, "InputRepulseDataBuffer", inputRepulsionBufferData);
-        _bakeComputeShader.SetInt("InputRepulseBufferCount", repulseData.Length);
+
+        cb = new ComputeBuffer(repulseData.Length, sizeof(float) * 5);
+        cb.SetData(repulseData);
+        return true;
+    }
+
+    private void Update()
+    {
+        if (_attractTargets == null || _attractTargets.Length == 0 || _inputBakeTexture == null)
+            return;
+
+        var inputBakeKernel = _bakeComputeShader.FindKernel("InputAttractBake");
+        _bakeComputeShader.SetTexture(inputBakeKernel, "InputTexture", _inputBakeTexture);
+
+        var inputAttractBufferData = ProcessInputAttractData();
+        _bakeComputeShader.SetBuffer(inputBakeKernel, "InputAttractDataBuffer", inputAttractBufferData);
+        _bakeComputeShader.SetInt("InputAttractBufferCount", inputAttractBufferData.count);
+
+        var succeed = ProcessInputRepulseData(out var inputRepulsionBufferData);
+        if (succeed)
+        {
+            _bakeComputeShader.SetBuffer(inputBakeKernel, "InputRepulseDataBuffer", inputRepulsionBufferData);
+            _bakeComputeShader.SetInt("InputRepulseBufferCount", inputRepulsionBufferData.count);
+        }
+
+        _bakeComputeShader.SetInt("TextureWidth", _inputBakeTexture.width);
+        _bakeComputeShader.SetInt("TextureHeight", _inputBakeTexture.height);
 
 
         _bakeComputeShader.Dispatch(
@@ -207,7 +255,7 @@ public class InputEntityManager : MonoBehaviour
         if (_attractTargets == null)
             return;
 
-        Gizmos.color = Color.green;
+        Gizmos.color = Color.blue;
         foreach(var target in _attractTargets)
             Gizmos.DrawWireSphere(target.position, 10f);
 
@@ -243,10 +291,21 @@ public class InputEntityManager : MonoBehaviour
     }
 }
 
-[InternalBufferCapacity(4)]
+[InternalBufferCapacity(10)]
 public struct InputPoint: IBufferElementData
 {
     public float2 LocalInputPosition;
+}
+
+public struct InputAttractTagComponent: IComponentData
+{
+
+}
+
+
+public struct InputRepulseTagComponent : IComponentData
+{
+
 }
 
 public struct InputAttractData

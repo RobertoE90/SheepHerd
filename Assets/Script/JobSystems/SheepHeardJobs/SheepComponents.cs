@@ -4,7 +4,7 @@ public struct SheepComponentDataEntity : IComponentData
 {
     public int InputAttrackIndex;
     public int InputRepulseIndex;
-    public float InputRepulseStrenght;
+    public float InputRepulseStrength;
     public int UpdateGroupId;
     public float LastStateChangeTime;
     public int CurrentState;

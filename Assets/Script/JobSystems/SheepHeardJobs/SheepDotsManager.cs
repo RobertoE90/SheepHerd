@@ -127,7 +127,8 @@ public class SheepDotsManager : MonoBehaviour
                 new SheepComponentDataEntity
                 {
                     InputAttrackIndex = UnityEngine.Random.Range(0, InputEntityManager.Instance.InputAttractCount),
-                    UpdateGroupId = (i % 100)
+                    UpdateGroupId = (i % 100),
+                    InputRepulseIndex = -1
                 });
 
             _entityManager.SetComponentData<RenderBounds>(_sheepEntities[i], new RenderBounds { Value = sheepBounds });

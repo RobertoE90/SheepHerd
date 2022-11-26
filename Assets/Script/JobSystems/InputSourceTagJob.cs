@@ -158,9 +158,9 @@ public class InputSourceTagJob : SystemBase
                 var inputRepulseId = -1;
                 if (inputRepulseStrength > 0.05) //apply repulse if is over threshold
                 {
-                    if (math.abs(inputRepulseStrength - sheep.InputRepulseStrenght) > 0.1f)
+                    if (math.abs(inputRepulseStrength - sheep.InputRepulseStrength) > 0.1f)
                     {
-                        sheep.InputRepulseStrenght = inputRepulseStrength;
+                        sheep.InputRepulseStrength = inputRepulseStrength;
                         sheepInfoChanged = true;
                     }
 

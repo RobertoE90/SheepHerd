@@ -8,7 +8,7 @@ AnimatorState:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: SimulateRepulseInputAnim
-  m_Speed: 0.1
+  m_Speed: 0.02
   m_CycleOffset: 0
   m_Transitions: []
   m_StateMachineBehaviours: []

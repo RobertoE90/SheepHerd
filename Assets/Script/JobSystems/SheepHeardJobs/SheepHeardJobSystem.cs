@@ -24,7 +24,8 @@ public class SheepHeardJobSystem : SystemBase
     private int _codeIterator;
     private Entity _globalParamsEntity;
     private GlobalParams _globalParams;
-    private Entity _inputBufferEntity;
+    private Entity _inputAttractBufferEntity;
+    private Entity _inputRepulseBufferEntity;
     
     private NativeArray<byte> _bakedTextureData;
 
@@ -36,7 +37,10 @@ public class SheepHeardJobSystem : SystemBase
             typeof(SheepComponentDataEntity)
         });
 
-        _inputBufferEntity = GetSingletonEntity<InputPoint>();
+        InitializeInputEntity(typeof(InputAttractTagComponent), out _inputAttractBufferEntity);
+        InitializeInputEntity(typeof(InputRepulseTagComponent), out _inputRepulseBufferEntity);
+        
+
         _globalParamsEntity = GetSingletonEntity<GlobalParams>();
         _globalParams = EntityManager.GetComponentData<GlobalParams>(_globalParamsEntity);
         _codeIterator = 0;
@@ -49,6 +53,14 @@ public class SheepHeardJobSystem : SystemBase
         }
 
         RequestTextureToArrayBake();
+    }
+
+    private void InitializeInputEntity(ComponentType tagComponentType, out Entity resultEntity)
+    {
+        var query = GetEntityQuery(new ComponentType[] { typeof(InputPoint), tagComponentType });
+        var entities = query.ToEntityArray(Allocator.Temp);
+        resultEntity = entities[0];
+        entities.Dispose();
     }
 
     private bool InitializeHeatMapParams() {
@@ -107,8 +119,12 @@ public class SheepHeardJobSystem : SystemBase
 
     protected override void OnUpdate()
     {
-        var inputsBuffer = GetBuffer<InputPoint>(_inputBufferEntity);
-        var inputsArray = inputsBuffer.ToNativeArray(Allocator.TempJob);
+        var inputsBuffer = GetBuffer<InputPoint>(_inputAttractBufferEntity);
+        var inputAttractArray = inputsBuffer.ToNativeArray(Allocator.TempJob);
+
+        inputsBuffer = GetBuffer<InputPoint>(_inputRepulseBufferEntity);
+        var inputRepulseArray = inputsBuffer.ToNativeArray(Allocator.TempJob);
+
 
         var randomValuesBuffer = GetBuffer<RandomData>(_globalParamsEntity);
         var randomArrays = randomValuesBuffer.ToNativeArray(Allocator.TempJob);
@@ -117,7 +133,8 @@ public class SheepHeardJobSystem : SystemBase
             GetComponentTypeHandle<Translation>(),
             GetComponentTypeHandle<Rotation>(),
             GetComponentTypeHandle<SheepComponentDataEntity>(),
-            inputsArray,
+            inputAttractArray,
+            inputRepulseArray,
             randomArrays,
             _bakedTextureData,
             _heatBakeTextureSize,
@@ -133,7 +150,8 @@ public class SheepHeardJobSystem : SystemBase
         if (_codeIterator >= _globalParams.MaxGroups)
             _codeIterator = 0;
 
-        inputsArray.Dispose();
+        inputAttractArray.Dispose();
+        inputRepulseArray.Dispose();
         randomArrays.Dispose();
     }
 
@@ -142,7 +160,8 @@ public class SheepHeardJobSystem : SystemBase
         public ComponentTypeHandle<Translation> _translationType;
         public ComponentTypeHandle<Rotation> _rotationType;
         public ComponentTypeHandle<SheepComponentDataEntity> _sheepType;
-        [ReadOnly] private NativeArray<InputPoint> _inputsArray;
+        [ReadOnly] private NativeArray<InputPoint> _inputAttractArray;
+        [ReadOnly] private NativeArray<InputPoint> _inputRepulseArray;
         [ReadOnly] private NativeArray<RandomData> _randomDataArray;
         [ReadOnly] private NativeArray<byte> _heatMap;
         private int2 _heatMapSize;
@@ -160,7 +179,8 @@ public class SheepHeardJobSystem : SystemBase
             ComponentTypeHandle<Translation> t,
             ComponentTypeHandle<Rotation> r,
             ComponentTypeHandle<SheepComponentDataEntity> sheepComponent,
-            NativeArray<InputPoint> inputsArray,
+            NativeArray<InputPoint> inputAttractArray,
+            NativeArray<InputPoint> inputRepulseArray,
             NativeArray<RandomData> randomDataArray,
             NativeArray<byte> heatMap,
             int2 heatMapSize,
@@ -173,7 +193,8 @@ public class SheepHeardJobSystem : SystemBase
             _rotationType = r;
             _sheepType = sheepComponent;
 
-            _inputsArray = inputsArray;
+            _inputAttractArray = inputAttractArray;
+            _inputRepulseArray = inputRepulseArray;
             _randomDataArray = randomDataArray;
 
             _heatMap = heatMap;
@@ -216,7 +237,7 @@ public class SheepHeardJobSystem : SystemBase
                         break;
                 }
 
-                //MoveAwayFromPoint(ref translation, ref rotation, ref sheep);
+                MoveAwayFromPoint(ref translation, ref rotation, ref sheep);
 
                 translations[i] = translation;
                 rotations[i] = rotation;
@@ -259,7 +280,7 @@ public class SheepHeardJobSystem : SystemBase
 
             if (_codeIterator == sheep.UpdateGroupId)
             {
-                var normalizedTargetDirection = math.normalizesafe(_inputsArray[sheep.InputAttrackIndex].LocalInputPosition - translation.Value.xz);
+                var normalizedTargetDirection = math.normalizesafe(_inputAttractArray[sheep.InputAttrackIndex].LocalInputPosition - translation.Value.xz);
                 var lookAtRotation = HorizontalLookAtRotation(normalizedTargetDirection);
                 
                 var positiveNormalizedSearchRot = math.mul(lookAtRotation, quaternion.EulerXYZ(0, _rotationStepSpread, 0));
@@ -440,14 +461,13 @@ public class SheepHeardJobSystem : SystemBase
         }
         private void MoveAwayFromPoint(ref Translation translation, ref Rotation rotation, ref SheepComponentDataEntity sheep)
         {
-            var escapeDistance = math.distance(translation.Value.xz, _inputsArray[3].LocalInputPosition);
-            if (escapeDistance > 10)
+            if (sheep.InputRepulseIndex == -1)
                 return;
 
-            var normalizedEscapeDirection = math.normalizesafe(translation.Value.xz - _inputsArray[3].LocalInputPosition);
+            var normalizedEscapeDirection = math.normalizesafe(translation.Value.xz - _inputRepulseArray[sheep.InputRepulseIndex].LocalInputPosition);
             var escapeRotation = HorizontalLookAtRotation(normalizedEscapeDirection);
 
-            var escapeForward = new float3(normalizedEscapeDirection.x, 0, normalizedEscapeDirection.y) * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * 10f;
+            var escapeForward = new float3(normalizedEscapeDirection.x, 0, normalizedEscapeDirection.y) * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * sheep.InputRepulseStrength * 3;
             
             var nextPositionMapIndex = LocalPositionToMapIndex(translation.Value + escapeForward * SHEEP_MOVEMENT_SPEED * 4, _physicalRectSize, _heatMapSize);
 
