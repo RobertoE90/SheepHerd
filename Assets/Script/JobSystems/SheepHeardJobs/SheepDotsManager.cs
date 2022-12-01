@@ -13,6 +13,9 @@ public class SheepDotsManager : MonoBehaviour
     [Header("Herd Config")]
     [SerializeField] private int _sheepCount;
     [SerializeField] private float _spawnSquareSide;
+    [SerializeField] private int _updateGroupCount = 100;
+    [SerializeField] private float _worldScale;
+    public float WorldScale => _worldScale;
 
     [Space(20)]
     [SerializeField] Mesh _sheepMesh;
@@ -35,13 +38,13 @@ public class SheepDotsManager : MonoBehaviour
         SpawnHerd();
         
         foreach(var baker in _cameraBakers)
-            baker.Initialize(_sheepCount, Vector2.one * _spawnSquareSide, transform.position, transform.rotation);
+            baker.Initialize(_sheepCount, Vector2.one * _spawnSquareSide, _worldScale, transform.position, transform.rotation);
        
         var entitiesInputManager = InputEntityManager.Instance;
         if (entitiesInputManager != null)
         {
             entitiesInputManager.SetInputReferenceMatrix(transform.localToWorldMatrix);
-            entitiesInputManager.Initialize(_spawnSquareSide);
+            entitiesInputManager.Initialize(Vector2.one * _spawnSquareSide, _worldScale);
         }
     }
 
@@ -52,7 +55,8 @@ public class SheepDotsManager : MonoBehaviour
         });
         _entityManager.SetComponentData<GlobalParams>(_globalParamsEntity, new GlobalParams
         {
-            MaxGroups = 100
+            MaxGroups = _updateGroupCount,
+            WorldScale = _worldScale
         });
 
         _entityManager.AddBuffer<RandomData>(_globalParamsEntity);
@@ -113,13 +117,13 @@ public class SheepDotsManager : MonoBehaviour
         for (var i = 0; i < _sheepEntities.Length; i++)
         {
             _entityManager.SetSharedComponentData<RenderMesh>(_sheepEntities[i], meshComponent);
-            _entityManager.SetComponentData<NonUniformScale>(_sheepEntities[i], new NonUniformScale { Value = Vector3.one });
+            _entityManager.SetComponentData<NonUniformScale>(_sheepEntities[i], new NonUniformScale { Value = Vector3.one * _worldScale });
             _entityManager.SetComponentData<Rotation>(_sheepEntities[i], new Rotation { Value = Quaternion.identity });
             _entityManager.SetComponentData<Translation>(
                 _sheepEntities[i],
                 new Translation
                 {
-                    Value = new Vector3(UnityEngine.Random.value - 0.5f, 0, UnityEngine.Random.value - 0.5f) * _spawnSquareSide
+                    Value = new Vector3(UnityEngine.Random.value - 0.5f, 0, UnityEngine.Random.value - 0.5f) * _spawnSquareSide * _worldScale
                 });
 
             _entityManager.SetComponentData<SheepComponentDataEntity>(
@@ -127,7 +131,7 @@ public class SheepDotsManager : MonoBehaviour
                 new SheepComponentDataEntity
                 {
                     InputAttrackIndex = UnityEngine.Random.Range(0, InputEntityManager.Instance.InputAttractCount),
-                    UpdateGroupId = (i % 100),
+                    UpdateGroupId = (i % _updateGroupCount),
                     InputRepulseIndex = -1
                 });
 

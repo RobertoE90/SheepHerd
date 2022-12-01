@@ -25,7 +25,8 @@ public class InputEntityManager : MonoBehaviour
 
     private static InputEntityManager _instance;
 
-    private float _bakeSideSize;
+    private float _worldScale;
+    private float2 _bakeSize;
     private RenderTexture _inputBakeTexture;
 
     private const int BAKE_INDEX_SCALE = 20;
@@ -60,12 +61,12 @@ public class InputEntityManager : MonoBehaviour
 
     }
 
-    public void Initialize(float bakeSideSize)
+    public void Initialize(Vector2 bakeSize, float worldScale)
     {
-        _bakeSideSize = bakeSideSize;
+        _bakeSize = bakeSize * worldScale;
         _inputBakeTexture = new RenderTexture(
-            (int)bakeSideSize * PositionIDBakeController.BakeTexturePPU, 
-            (int)bakeSideSize * PositionIDBakeController.BakeTexturePPU, 
+            (int)bakeSize.x * PositionIDBakeController.BakeTexturePPU, 
+            (int)bakeSize.y * PositionIDBakeController.BakeTexturePPU, 
             0, 
             RenderTextureFormat.ARGB32);
 
@@ -76,8 +77,10 @@ public class InputEntityManager : MonoBehaviour
         var mat = _debugSurfaceRenderer.material;
         mat.SetTexture("_BaseMap", _inputBakeTexture);
 
-        _debugSurfaceRenderer.transform.localScale = new Vector3(bakeSideSize, 1, bakeSideSize);
-        SpawnInputBakeEntity(Vector2.one * bakeSideSize, _inputBakeTexture);
+        _debugSurfaceRenderer.transform.localScale = new Vector3(bakeSize.x * worldScale, 1, bakeSize.y * worldScale);
+        SpawnInputBakeEntity(_bakeSize, _inputBakeTexture);
+
+        _worldScale = worldScale;
     }
 
 
@@ -168,12 +171,13 @@ public class InputEntityManager : MonoBehaviour
             return false;
         }
 
+        
         var repulseData = new InputRepulseData[_repulseTargets.Length];
         for (var i = 0; i < _repulseTargets.Length; i++)
         {
             inputBufferAsArray[i] = WorldToInputSpace(_repulseTargets[i].position);
             float repulseSpeed = ComputeRepulseInputSpeed(i);
-            repulseSpeed /= _bakeSideSize;
+            repulseSpeed /= _bakeSize.x;
             repulseSpeed = Mathf.Clamp(0f, repulseSpeed * 2, 0.2f);
 
             repulseData[i] = new InputRepulseData
@@ -187,6 +191,7 @@ public class InputEntityManager : MonoBehaviour
 
         cb = new ComputeBuffer(repulseData.Length, sizeof(float) * 5);
         cb.SetData(repulseData);
+        
         return true;
     }
 
@@ -230,6 +235,7 @@ public class InputEntityManager : MonoBehaviour
             _repulseLastFramePositions[i] = _repulseTargets[i].position;
         }
     }
+
     private float ComputeRepulseInputSpeed(int index)
     {
         if(_repulseLastFramePositions == null)
@@ -257,18 +263,18 @@ public class InputEntityManager : MonoBehaviour
 
         Gizmos.color = Color.blue;
         foreach(var target in _attractTargets)
-            Gizmos.DrawWireSphere(target.position, 10f);
+            Gizmos.DrawWireSphere(target.position, 10f * _worldScale);
 
         Gizmos.color = Color.red;
         foreach (var target in _repulseTargets)
-            Gizmos.DrawWireSphere(target.position, 20f);
+            Gizmos.DrawWireSphere(target.position, 20f * _worldScale);
     }
 
-    public float2 WorldToTextureUv(Vector3 worldPos)
+    private float2 WorldToTextureUv(Vector3 worldPos)
     {
         var positionValue = WorldToInputSpace(worldPos);
-        positionValue = positionValue + new float2(1, 1) * _bakeSideSize * 0.5f;
-        positionValue /= _bakeSideSize;
+        positionValue = positionValue + _bakeSize * 0.5f;
+        positionValue = new float2(positionValue.x / _bakeSize.x, positionValue.y / _bakeSize.y);
         return positionValue;
     }
 

@@ -43,6 +43,8 @@ public class InputSourceTagJob : SystemBase
             }
         }
 
+        Debug.Log($"asdsadasd {_texturePhysicalRectSize}");
+
         if (_inputsIdTexture == null)
             return;
 

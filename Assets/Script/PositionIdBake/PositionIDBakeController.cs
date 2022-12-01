@@ -10,15 +10,15 @@ public class PositionIDBakeController : BaseEntityCameraBaker
     private static int _ppuCopy;
     public static int BakeTexturePPU => _ppuCopy;
 
-    public override void Initialize(int referencesCount, Vector2 bakeArea, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
+    public override void Initialize(int referencesCount, Vector2 bakeArea, float worldScale, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
     {
-        base.Initialize(referencesCount, bakeArea, centerWorldPosition, centerWorldRotation);
-        SpawnPositionIdBakers(referencesCount);
+        base.Initialize(referencesCount, bakeArea, worldScale, centerWorldPosition, centerWorldRotation);
+        SpawnPositionIdBakers(referencesCount, worldScale);
         _ppuCopy = _bakeTexturePPU;
-        SpawnEntityIdTextureBakeEntity(bakeArea, _bakeTexture);
+        SpawnEntityIdTextureBakeEntity(bakeArea * worldScale, _bakeTexture);
     }
 
-    private void SpawnPositionIdBakers(int referencesCount)
+    private void SpawnPositionIdBakers(int referencesCount, float worldScale)
     {
         var entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
         var archetype = entityManager.CreateArchetype(new ComponentType[] {
@@ -52,7 +52,7 @@ public class PositionIDBakeController : BaseEntityCameraBaker
         for (var i = 0; i < bakerEntities.Length; i++)
         {
             entityManager.SetSharedComponentData<RenderMesh>(bakerEntities[i], meshComponent);
-            entityManager.SetComponentData<Scale>(bakerEntities[i], new Scale { Value = 1 });
+            entityManager.SetComponentData<Scale>(bakerEntities[i], new Scale { Value = worldScale });
             entityManager.SetComponentData<RenderBounds>(
                 bakerEntities[i],
                 new RenderBounds { Value = bounds });

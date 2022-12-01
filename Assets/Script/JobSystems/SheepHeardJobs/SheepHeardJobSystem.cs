@@ -139,6 +139,7 @@ public class SheepHeardJobSystem : SystemBase
             _bakedTextureData,
             _heatBakeTextureSize,
             _movementHeatRectSize,
+            _globalParams.WorldScale,
             _codeIterator,
             Time.DeltaTime,
             (float)Time.ElapsedTime);
@@ -167,6 +168,7 @@ public class SheepHeardJobSystem : SystemBase
         private int2 _heatMapSize;
         
         private float2 _physicalRectSize;
+        private float _worldScale;
 
         private int _codeIterator;
 
@@ -185,6 +187,7 @@ public class SheepHeardJobSystem : SystemBase
             NativeArray<byte> heatMap,
             int2 heatMapSize,
             float2 physicalRectSize,
+            float worldScale,
             int codeIterator,
             float deltaTime,
             float time)
@@ -200,7 +203,7 @@ public class SheepHeardJobSystem : SystemBase
             _heatMap = heatMap;
             _heatMapSize = heatMapSize;
             _physicalRectSize = physicalRectSize;
-
+            _worldScale = worldScale;
             _codeIterator = codeIterator;
 
             _rotationStepSpread = math.PI * 0.1f;
@@ -521,7 +524,7 @@ public class SheepHeardJobSystem : SystemBase
         private bool GetDeltaHeatAtRotation(float3 entityPosition, float3 searchDirection, float distance,  out byte value, bool debug = false)
         {
             value = byte.MaxValue;
-            var searchPosition = entityPosition + (searchDirection * distance);
+            var searchPosition = entityPosition + (searchDirection * distance * _worldScale);
 
             if(debug)
                 Debug.DrawLine(entityPosition, searchPosition, Color.yellow);
@@ -538,7 +541,7 @@ public class SheepHeardJobSystem : SystemBase
         private bool GetDeltaTraceAtRotation(float3 entityPosition, float3 searchDirection, float distance, out byte value, bool debug = false)
         {
             value = byte.MaxValue;
-            var searchPosition = entityPosition + (searchDirection * distance);
+            var searchPosition = entityPosition + (searchDirection * distance * _worldScale);
             if(debug)
                 Debug.DrawLine(entityPosition, searchPosition, Color.yellow);
 
@@ -572,11 +575,11 @@ public class SheepHeardJobSystem : SystemBase
             return index;
         }
 
-        private bool CanMoveForward(Translation translation, Rotation rotation, float3 globalForward, out float3 localForward, float forwardSearchDistance = 5, int ThresholdValue = 200)
+        private bool CanMoveForward(Translation translation, Rotation rotation, float3 globalForward, out float3 localForward, float forwardSearchScale = 5, int ThresholdValue = 200)
         {
             var normalizedLocalForward = math.mul(rotation.Value, globalForward);
-            localForward = normalizedLocalForward * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime;
-            var localForwardHeatMapIndex = LocalPositionToMapIndex(translation.Value + localForward * SHEEP_MOVEMENT_SPEED * forwardSearchDistance, _physicalRectSize, _heatMapSize);
+            localForward = normalizedLocalForward * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * _worldScale;
+            var localForwardHeatMapIndex = LocalPositionToMapIndex(translation.Value + localForward * SHEEP_MOVEMENT_SPEED * forwardSearchScale, _physicalRectSize, _heatMapSize);
             //Debug.Log(_heatMap[localForwardHeatMapIndex]);
             return (localForwardHeatMapIndex != -1 && _heatMap[localForwardHeatMapIndex] < ThresholdValue);
         }

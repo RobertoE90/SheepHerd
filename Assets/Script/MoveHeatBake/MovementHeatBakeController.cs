@@ -9,21 +9,21 @@ public class MovementHeatBakeController : BaseEntityCameraBaker
 {
     [SerializeField] private int _decalImageSideSize;
 
-    public override void Initialize(int referencesCount, Vector2 bakeArea, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
+    public override void Initialize(int referencesCount, Vector2 bakeArea, float worldScale, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
     {
-        base.Initialize(referencesCount, bakeArea, centerWorldPosition, centerWorldRotation);
+        base.Initialize(referencesCount, bakeArea, worldScale, centerWorldPosition, centerWorldRotation);
         _isInitialized = false;
 
         var heatDecalGenerator = new MoveHeatDecalGenerator(_decalImageSideSize, _decalImageSideSize);
         _bakeMaterial.SetTexture("_BaseMap", heatDecalGenerator.BakedTexture);
 
-        SpawnHeatMovementBakers(referencesCount);
-        SpawnHeatBakeBufferEntity(bakeArea, _bakeTexture);
+        SpawnHeatMovementBakers(referencesCount, worldScale);
+        SpawnHeatBakeBufferEntity(bakeArea * worldScale, _bakeTexture);
 
         _isInitialized = true;
     }
 
-    private void SpawnHeatMovementBakers(int referencesCount)
+    private void SpawnHeatMovementBakers(int referencesCount, float worldScale)
     {
         var entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
         var archetype = entityManager.CreateArchetype(new ComponentType[] {
@@ -55,7 +55,7 @@ public class MovementHeatBakeController : BaseEntityCameraBaker
         for (var i = 0; i < heatBakersEntities.Length; i++)
         {
             entityManager.SetSharedComponentData<RenderMesh>(heatBakersEntities[i], meshComponent);
-            entityManager.SetComponentData<Scale>(heatBakersEntities[i], new Scale { Value = _decalImageSideSize });
+            entityManager.SetComponentData<Scale>(heatBakersEntities[i], new Scale { Value = _decalImageSideSize * worldScale });
             entityManager.SetComponentData<CopyTransformReferenceComponent>(
                 heatBakersEntities[i], 
                 new CopyTransformReferenceComponent { 

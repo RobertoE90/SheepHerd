@@ -35,14 +35,14 @@ public class BaseEntityCameraBaker : MonoBehaviour
 
     public event Action InitializedAction;
 
-    public virtual void Initialize(int referencesCount, Vector2 bakeArea, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
+    public virtual void Initialize(int referencesCount, Vector2 bakeArea, float worldScale, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
     {
         _textureSize = new Vector2Int((int)(bakeArea.x * _bakeTexturePPU), (int)(bakeArea.y * _bakeTexturePPU));
         _bakeTexture = new RenderTexture(_textureSize.x, _textureSize.y, 0, RenderTextureFormat.ARGB32, 0);
         _bakeTexture.enableRandomWrite = writeToBakedTexture;
         _bakeTexture.Create();
 
-        _bakeDebugMeshRenderer.transform.localScale = new Vector3(bakeArea.x, 1, bakeArea.y);
+        _bakeDebugMeshRenderer.transform.localScale = new Vector3(bakeArea.x * worldScale, 1, bakeArea.y * worldScale);
 
         _bakeDebugMeshRenderer.transform.position = centerWorldPosition + centerWorldRotation * (Vector3.up * 0.01f);
         _bakeDebugMeshRenderer.transform.rotation = centerWorldRotation;
@@ -50,11 +50,11 @@ public class BaseEntityCameraBaker : MonoBehaviour
         material.SetTexture("_BaseMap", _bakeTexture);
 
         _bakeCamera.transform.rotation = centerWorldRotation * Quaternion.Euler(90, 0, 0);
-        _bakeCamera.transform.position = centerWorldPosition + centerWorldRotation * (Vector3.up * CAMERA_DEPTH);
-        _bakeCamera.nearClipPlane = 0.1f;
-        _bakeCamera.farClipPlane = CAMERA_DEPTH + 0.1f;
+        _bakeCamera.transform.position = centerWorldPosition + centerWorldRotation * (Vector3.up * CAMERA_DEPTH * worldScale);
+        _bakeCamera.nearClipPlane = 0.1f * worldScale;
+        _bakeCamera.farClipPlane = (CAMERA_DEPTH + 0.1f) * worldScale;
         _bakeCamera.orthographic = true;
-        _bakeCamera.orthographicSize = bakeArea.y * 0.5f;
+        _bakeCamera.orthographicSize = bakeArea.y * 0.5f * worldScale;
         _bakeCamera.targetTexture = _bakeTexture;
         
         _bakeLayerId = LayerMask.NameToLayer(_bakeLayerName);

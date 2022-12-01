@@ -3,6 +3,7 @@ using Unity.Entities;
 public struct GlobalParams : IComponentData
 {
     public int MaxGroups;
+    public float WorldScale;
 }
 
 [InternalBufferCapacity(10)]
