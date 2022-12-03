@@ -1,6 +1,4 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using Unity.Burst;
 using Unity.Collections;
 using Unity.Entities;
@@ -155,7 +153,6 @@ public class InputSourceTagJob : SystemBase
                 }
 
                 var inputRepulseStrength = _inputIdMap[idMapIndex] / 255f; //red channel for repulse strenght
-                var inputRepulseId = -1;
                 if (inputRepulseStrength > 0.05) //apply repulse if is over threshold
                 {
                     if (math.abs(inputRepulseStrength - sheep.InputRepulseStrength) > 0.1f)
@@ -163,16 +160,8 @@ public class InputSourceTagJob : SystemBase
                         sheep.InputRepulseStrength = inputRepulseStrength;
                         sheepInfoChanged = true;
                     }
-
-                    inputRepulseId = InputEntityManager.ColorCodeToIndex(_inputIdMap[idMapIndex + 1]); //green channel for repulse group id
                 }
 
-                if (inputRepulseId != sheep.InputRepulseIndex)
-                {
-                    sheep.InputRepulseIndex = inputRepulseId;
-                    sheepInfoChanged = true;
-                }
-                
                 if (sheepInfoChanged)
                     sheeps[i] = sheep;
             }

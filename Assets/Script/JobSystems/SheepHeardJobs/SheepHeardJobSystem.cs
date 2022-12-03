@@ -80,7 +80,6 @@ public class SheepHeardJobSystem : SystemBase
 
     private void RequestTextureToArrayBake()
     {
-        
         AsyncGPUReadback.Request(
             _heatBakeTexture,
             0,
@@ -238,9 +237,9 @@ public class SheepHeardJobSystem : SystemBase
                 var movingAway = MoveAwayFromPoint(ref translation, ref sheep);
                 if(movingAway)
                     color.Value = new float4(1, 0, 0, 0);
-
+                
                 var rotationSpeed = movingAway ? 1f : 5f;
-
+                
                 //rotate to target
                 var rotationTick = ComputeRotationTick(sheep.TargetRotation, rotation.Value, rotationSpeed);
                 rotation.Value = math.mul(rotation.Value, quaternion.EulerXYZ(0, rotationTick, 0));
@@ -287,6 +286,7 @@ public class SheepHeardJobSystem : SystemBase
 
             if (_codeIterator == sheep.UpdateGroupId)
             {
+                
                 var normalizedTargetDirection = math.normalizesafe(_inputAttractArray[sheep.InputAttrackIndex].LocalInputPosition - translation.Value.xz);
                 var lookAtRotation = HorizontalLookAtRotation(normalizedTargetDirection);
                 
@@ -315,7 +315,6 @@ public class SheepHeardJobSystem : SystemBase
                 }
 
                 sheep.TargetRotation = targetRotation;
-
                 if (_executionTime - sheep.LastStateChangeTime > 150) {
                     var randomValue = GetRandomNormalizedValue(sheep.UpdateGroupId);
                     ChangeState(randomValue > 0.6f ? 1 : 0, ref sheep);

@@ -148,7 +148,6 @@ public class InputEntityManager : MonoBehaviour
         var repulseData = new InputRepulseData[_repulseTargets.Length];
         for (var i = 0; i < _repulseTargets.Length; i++)
         {
-            var position = WorldToInputSpace(_repulseTargets[i].position);
             float repulseSpeed = ComputeRepulseInputSpeed(i);
             repulseSpeed /= _bakeSize.x;
             repulseSpeed = Mathf.Clamp(0f, repulseSpeed * 2, 0.2f);
@@ -156,13 +155,12 @@ public class InputEntityManager : MonoBehaviour
             repulseData[i] = new InputRepulseData
             {
                 UvPosition = WorldToTextureUv(_repulseTargets[i].position),
-                ColorChannelId = InputIndexToColorChannelCode(i),
                 Width = repulseSpeed,
                 Strengh = 1.0f
             };
         }
 
-        cb = new ComputeBuffer(repulseData.Length, sizeof(float) * 5);
+        cb = new ComputeBuffer(repulseData.Length, sizeof(float) * 4);
         cb.SetData(repulseData);
         
         return true;
@@ -289,7 +287,6 @@ public struct InputAttractData
 
 public struct InputRepulseData
 {
-    public float ColorChannelId;
     public float2 UvPosition;
     public float Width;
     public float Strengh;
