@@ -28,13 +28,12 @@ public class CopySheepTransformSystem : SystemBase
         });
 
         _currentChunkExecutionCode = 0;
-        _chunkExecutionLoopCount = 5;
+        _chunkExecutionLoopCount = 20;
     }
 
     protected override void OnUpdate()
     {
         var referencesTransforms = _sheepsQuery.ToComponentDataArray<LocalToWorld>(Allocator.TempJob);
-
         var job = new CopyTransformJob(
             GetComponentTypeHandle<Translation>(),
             GetComponentTypeHandle<Rotation>(),
@@ -85,10 +84,6 @@ public class CopySheepTransformSystem : SystemBase
             NativeArray<Rotation> rotations = batchInChunk.GetNativeArray(this._rotationType);
             NativeArray<CopyTransformReferenceComponent> indexRefs = batchInChunk.GetNativeArray(this._indexReferenceType);
 
-            //Debug.Log(batchInChunk.Count);
-
-            //if (batchIndex % _executionLoopLength != _chunkExcecutionCode)
-              //  return;
 
             for (int i = 0; i < batchInChunk.Count; ++i)
             {

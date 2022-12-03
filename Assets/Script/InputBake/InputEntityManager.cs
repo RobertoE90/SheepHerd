@@ -19,7 +19,6 @@ public class InputEntityManager : MonoBehaviour
     [SerializeField] private Renderer _debugSurfaceRenderer;
 
     private Entity _inputAttractEntity;
-    private Entity _inputRepulseEntity;
     private EntityManager _entityManager;
     private Matrix4x4 _originTransform;
 
@@ -53,12 +52,7 @@ public class InputEntityManager : MonoBehaviour
         _entityManager.AddComponent(_inputAttractEntity, typeof(InputAttractTagComponent));
         _entityManager.AddBuffer<InputPoint>(_inputAttractEntity);
 
-        _inputRepulseEntity = _entityManager.CreateEntity();
-        _entityManager.AddComponent(_inputRepulseEntity, typeof(InputRepulseTagComponent));
-        _entityManager.AddBuffer<InputPoint>(_inputRepulseEntity);
-
         _originTransform = Matrix4x4.identity;
-
     }
 
     public void Initialize(Vector2 bakeSize, float worldScale)
@@ -150,32 +144,11 @@ public class InputEntityManager : MonoBehaviour
            cb = new ComputeBuffer(1, 4);
            return false;
         }
-        var dynamicBuffer = _entityManager.GetBuffer<InputPoint>(_inputRepulseEntity);
-        if (dynamicBuffer.Length != _repulseTargets.Length)
-        {
-            for (var i = dynamicBuffer.Length; i < _repulseTargets.Length; i++)
-            {
-                dynamicBuffer.Add(new InputPoint
-                {
-                    LocalInputPosition = new float2(0, 0),
-                });
-            }
-        }
 
-        var inputBufferAsArray = dynamicBuffer.Reinterpret<float2>();
-
-        if (inputBufferAsArray.Length != _repulseTargets.Length)
-        {
-            Debug.LogError("Buffer different from target size");
-            cb = new ComputeBuffer(1, 4);
-            return false;
-        }
-
-        
         var repulseData = new InputRepulseData[_repulseTargets.Length];
         for (var i = 0; i < _repulseTargets.Length; i++)
         {
-            inputBufferAsArray[i] = WorldToInputSpace(_repulseTargets[i].position);
+            var position = WorldToInputSpace(_repulseTargets[i].position);
             float repulseSpeed = ComputeRepulseInputSpeed(i);
             repulseSpeed /= _bakeSize.x;
             repulseSpeed = Mathf.Clamp(0f, repulseSpeed * 2, 0.2f);
@@ -304,12 +277,6 @@ public struct InputPoint: IBufferElementData
 }
 
 public struct InputAttractTagComponent: IComponentData
-{
-
-}
-
-
-public struct InputRepulseTagComponent : IComponentData
 {
 
 }

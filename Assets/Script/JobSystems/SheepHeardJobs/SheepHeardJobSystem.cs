@@ -4,17 +4,17 @@ using Unity.Entities;
 using Unity.Jobs;
 using Unity.Transforms;
 using UnityEngine;
-using UnityEngine.Jobs;
 using Unity.Mathematics;
 using Unity.Collections;
 using System;
 using UnityEngine.Rendering;
 using Unity.Burst;
+using Unity.Rendering;
 
 public class SheepHeardJobSystem : SystemBase
 {
     private const float SHEEP_MOVEMENT_SPEED = 1f;
-    private const float SHEEP_TURN_SPEED = 1f;
+    private const float SHEEP_TURN_SPEED = 0.045f;
     private EntityQuery _sheepsQuery;
 
     private RenderTexture _heatBakeTexture;
@@ -25,7 +25,6 @@ public class SheepHeardJobSystem : SystemBase
     private Entity _globalParamsEntity;
     private GlobalParams _globalParams;
     private Entity _inputAttractBufferEntity;
-    private Entity _inputRepulseBufferEntity;
     
     private NativeArray<byte> _bakedTextureData;
 
@@ -37,8 +36,11 @@ public class SheepHeardJobSystem : SystemBase
             typeof(SheepComponentDataEntity)
         });
 
-        InitializeInputEntity(typeof(InputAttractTagComponent), out _inputAttractBufferEntity);
-        InitializeInputEntity(typeof(InputRepulseTagComponent), out _inputRepulseBufferEntity);
+        //initialize input entities
+        var query = GetEntityQuery(new ComponentType[] { typeof(InputPoint), typeof(InputAttractTagComponent) });
+        var entities = query.ToEntityArray(Allocator.Temp);
+        _inputAttractBufferEntity = entities[0];
+        entities.Dispose();
         
 
         _globalParamsEntity = GetSingletonEntity<GlobalParams>();
@@ -53,14 +55,6 @@ public class SheepHeardJobSystem : SystemBase
         }
 
         RequestTextureToArrayBake();
-    }
-
-    private void InitializeInputEntity(ComponentType tagComponentType, out Entity resultEntity)
-    {
-        var query = GetEntityQuery(new ComponentType[] { typeof(InputPoint), tagComponentType });
-        var entities = query.ToEntityArray(Allocator.Temp);
-        resultEntity = entities[0];
-        entities.Dispose();
     }
 
     private bool InitializeHeatMapParams() {
@@ -122,19 +116,15 @@ public class SheepHeardJobSystem : SystemBase
         var inputsBuffer = GetBuffer<InputPoint>(_inputAttractBufferEntity);
         var inputAttractArray = inputsBuffer.ToNativeArray(Allocator.TempJob);
 
-        inputsBuffer = GetBuffer<InputPoint>(_inputRepulseBufferEntity);
-        var inputRepulseArray = inputsBuffer.ToNativeArray(Allocator.TempJob);
-
-
         var randomValuesBuffer = GetBuffer<RandomData>(_globalParamsEntity);
         var randomArrays = randomValuesBuffer.ToNativeArray(Allocator.TempJob);
-
+        
         UpdateMovementJob job = new UpdateMovementJob(
             GetComponentTypeHandle<Translation>(),
             GetComponentTypeHandle<Rotation>(),
             GetComponentTypeHandle<SheepComponentDataEntity>(),
+            GetComponentTypeHandle<URPMaterialPropertyBaseColor>(),
             inputAttractArray,
-            inputRepulseArray,
             randomArrays,
             _bakedTextureData,
             _heatBakeTextureSize,
@@ -152,17 +142,16 @@ public class SheepHeardJobSystem : SystemBase
             _codeIterator = 0;
 
         inputAttractArray.Dispose();
-        inputRepulseArray.Dispose();
         randomArrays.Dispose();
     }
 
     private struct UpdateMovementJob : IJobEntityBatch
     {
-        public ComponentTypeHandle<Translation> _translationType;
-        public ComponentTypeHandle<Rotation> _rotationType;
-        public ComponentTypeHandle<SheepComponentDataEntity> _sheepType;
+        private ComponentTypeHandle<Translation> _translationType;
+        private ComponentTypeHandle<Rotation> _rotationType;
+        private ComponentTypeHandle<SheepComponentDataEntity> _sheepType;
+        private ComponentTypeHandle<URPMaterialPropertyBaseColor> _color;
         [ReadOnly] private NativeArray<InputPoint> _inputAttractArray;
-        [ReadOnly] private NativeArray<InputPoint> _inputRepulseArray;
         [ReadOnly] private NativeArray<RandomData> _randomDataArray;
         [ReadOnly] private NativeArray<byte> _heatMap;
         private int2 _heatMapSize;
@@ -181,8 +170,8 @@ public class SheepHeardJobSystem : SystemBase
             ComponentTypeHandle<Translation> t,
             ComponentTypeHandle<Rotation> r,
             ComponentTypeHandle<SheepComponentDataEntity> sheepComponent,
+            ComponentTypeHandle<URPMaterialPropertyBaseColor> color,
             NativeArray<InputPoint> inputAttractArray,
-            NativeArray<InputPoint> inputRepulseArray,
             NativeArray<RandomData> randomDataArray,
             NativeArray<byte> heatMap,
             int2 heatMapSize,
@@ -195,9 +184,9 @@ public class SheepHeardJobSystem : SystemBase
             _translationType = t;
             _rotationType = r;
             _sheepType = sheepComponent;
+            _color = color;
 
             _inputAttractArray = inputAttractArray;
-            _inputRepulseArray = inputRepulseArray;
             _randomDataArray = randomDataArray;
 
             _heatMap = heatMap;
@@ -217,6 +206,7 @@ public class SheepHeardJobSystem : SystemBase
             NativeArray<Translation> translations = batchInChunk.GetNativeArray(this._translationType);
             NativeArray<Rotation> rotations = batchInChunk.GetNativeArray(this._rotationType);
             NativeArray<SheepComponentDataEntity> sheeps = batchInChunk.GetNativeArray(this._sheepType);
+            NativeArray<URPMaterialPropertyBaseColor> colors = batchInChunk.GetNativeArray(this._color);
 
 
             for (int i = 0; i < batchInChunk.Count; ++i)
@@ -224,27 +214,41 @@ public class SheepHeardJobSystem : SystemBase
                 var translation = translations[i];
                 var rotation = rotations[i];
                 var sheep = sheeps[i];
+                var color = colors[i];
 
                 switch (sheep.CurrentState) {
                     case 0: //move to target
-                        MoveToTarget(ref translation, ref rotation, ref sheep);
+                        MoveToTarget(ref translation, rotation, ref sheep);
+                        color.Value = new float4(0, 1, 0, 0);
                         break;
                     case 1: //move to trace
-                        FollowOthersTrace(ref translation, ref rotation, ref sheep);
+                        FollowOthersTrace(ref translation, rotation, ref sheep);
+                        color.Value = new float4(0, 0.5f, 0.5f, 0);
                         break;
                     case 2: //move to less heat zone
-                        MoveToLessHeat(ref translation, ref rotation, ref sheep);
+                        color.Value = new float4(0, 0, 1, 0);
+                        MoveToLessHeat(ref translation, rotation, ref sheep);
                         break;
                     case 3: //idle
+                        color.Value = new float4(1, 0, 1, 0);
                         Idle(ref sheep, translation.Value);
                         break;
                 }
 
-                MoveAwayFromPoint(ref translation, ref rotation, ref sheep);
+                var movingAway = MoveAwayFromPoint(ref translation, ref sheep);
+                if(movingAway)
+                    color.Value = new float4(1, 0, 0, 0);
+
+                var rotationSpeed = movingAway ? 1f : 5f;
+
+                //rotate to target
+                var rotationTick = ComputeRotationTick(sheep.TargetRotation, rotation.Value, rotationSpeed);
+                rotation.Value = math.mul(rotation.Value, quaternion.EulerXYZ(0, rotationTick, 0));
+                rotations[i] = rotation;
 
                 translations[i] = translation;
-                rotations[i] = rotation;
                 sheeps[i] = sheep;
+                colors[i] = color;
             }
         }
 
@@ -256,10 +260,10 @@ public class SheepHeardJobSystem : SystemBase
             }
 
             if(_executionTime - sheep.LastStateChangeTime > sheep.StateExtraInfo)
-                ChangeState(2, ref sheep); //less heat search state
+                ChangeToRandomState(ref sheep); //change to random state
         }
 
-        private void MoveToTarget(ref Translation translation, ref Rotation rotation, ref SheepComponentDataEntity sheep)
+        private void MoveToTarget(ref Translation translation, Rotation rotation, ref SheepComponentDataEntity sheep)
         {
             var globalForward = new float3(0, 0, 1);
             var canMoveForward = CanMoveForward(translation, rotation, globalForward, out var localForward);
@@ -272,10 +276,10 @@ public class SheepHeardJobSystem : SystemBase
             else
             {
                 sheep.StateExtraInfo++;
-                if (sheep.StateExtraInfo > 40) //no move max time
+                if (sheep.StateExtraInfo > 200) //no move max time
                 {
-                    if(GetRandomNormalizedValue(sheep.UpdateGroupId) > 0.6f)
-                        ChangeState(2, ref sheep); //less heat search state
+                    if (GetRandomNormalizedValue(sheep.UpdateGroupId) > 0.6f)
+                        ChangeState(2, ref sheep);
                     else
                         sheep.StateExtraInfo = 0;
                 }
@@ -309,27 +313,28 @@ public class SheepHeardJobSystem : SystemBase
                         negativeNormalizedSearchRot :
                         positiveNormalizedSearchRot;
                 }
-                
-                var angle = GetSignedAngleWidthRotations(targetRotation, rotation.Value, out var sign);
-                var stepAngle = SHEEP_TURN_SPEED * _scaledDeltaTime * 5f;
-                if (angle > stepAngle)
-                    angle = stepAngle;
-                rotation.Value = math.mul(rotation.Value, quaternion.EulerXYZ(0, sign * angle, 0));
 
-                if (_executionTime - sheep.LastStateChangeTime > 40) {
+                sheep.TargetRotation = targetRotation;
+
+                if (_executionTime - sheep.LastStateChangeTime > 150) {
                     var randomValue = GetRandomNormalizedValue(sheep.UpdateGroupId);
-                    if (randomValue > 0.85f)
-                        ChangeState(3, ref sheep); //go to idle
-                    else if(randomValue > 0.65f)
-                        ChangeState(1, ref sheep); //change to follow trace
+                    ChangeState(randomValue > 0.6f ? 1 : 0, ref sheep);
                 }
             }
         }
 
-        private void FollowOthersTrace(ref Translation translation, ref Rotation rotation, ref SheepComponentDataEntity sheep)
+        private void FollowOthersTrace(ref Translation translation, Rotation rotation, ref SheepComponentDataEntity sheep)
         {
             var globalForward = new float3(0, 0, 1);
             var canMoveForward = CanMoveForward(translation, rotation, globalForward, out var localForward);
+
+            GetDeltaTraceAtRotation(
+                translation.Value,
+                math.mul(rotation.Value, globalForward),
+                SHEEP_MOVEMENT_SPEED * 2,
+                out var forwardValue);
+
+            canMoveForward = canMoveForward && forwardValue > 10;
 
             if (canMoveForward)
             {
@@ -341,8 +346,8 @@ public class SheepHeardJobSystem : SystemBase
                 sheep.StateExtraInfo++;
                 if (sheep.StateExtraInfo > 20) //no move max time
                 {
-                    if (GetRandomNormalizedValue(sheep.UpdateGroupId) > 0.6f)
-                        ChangeState(2, ref sheep); //less heat search state
+                    if (GetRandomNormalizedValue(sheep.UpdateGroupId + 1) > 0.75f)
+                        ChangeToRandomState(ref sheep); //less heat search state
                     else
                         sheep.StateExtraInfo = 0;
                 }
@@ -350,44 +355,35 @@ public class SheepHeardJobSystem : SystemBase
 
             if (_codeIterator == sheep.UpdateGroupId)
             {
-                var positiveNormalizedSearchRot = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread, 0));
-                GetDeltaTraceAtRotation(
-                    translation.Value,
-                    math.mul(positiveNormalizedSearchRot, globalForward),
-                    SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * 30,
-                    out var tracePositiveValue);
-
-                var negativeNormalizedSearchRot = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread * -1, 0));
-                GetDeltaTraceAtRotation(
-                    translation.Value,
-                    math.mul(negativeNormalizedSearchRot, globalForward),
-                    SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * 30,
-                    out var traceNegativeValue);
-
-                var isPositiveTarget = tracePositiveValue > traceNegativeValue;
-                var  targetRotation = isPositiveTarget ?
-                        positiveNormalizedSearchRot :
-                        negativeNormalizedSearchRot;
-
-                var max = isPositiveTarget ? tracePositiveValue : traceNegativeValue;
-                if (max < 75)
+                var dirSearchTick = 2;
+                var maxValue = 0;
+                quaternion targetRotation = quaternion.identity;
+                for(var i = dirSearchTick * -1; i <= dirSearchTick; i++)
                 {
-                    ChangeState(
-                        GetRandomNormalizedValue(sheep.UpdateGroupId) > 0.5f ? 0 : 2,
-                        ref sheep); //go to target or to less heat
+                    var searchQuat = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread * i, 0));
+                    GetDeltaTraceAtRotation(
+                        translation.Value,
+                        math.mul(searchQuat, globalForward),
+                        SHEEP_MOVEMENT_SPEED * 5,
+                        out var traceSearchValue);
+                    if(maxValue < traceSearchValue)
+                    {
+                        maxValue = traceSearchValue;
+                        targetRotation = searchQuat;
+                    }
+                }
+
+                if (maxValue < 45)
+                {
+                    ChangeToRandomState(ref sheep); //go to target or to less heat
                     return;
                 }
 
-                var angle = GetSignedAngleWidthRotations(targetRotation, rotation.Value, out var sign);
-                var stepAngle = SHEEP_TURN_SPEED * _scaledDeltaTime * 5f;
-                if (angle > stepAngle)
-                    angle = stepAngle;
-
-                rotation.Value = math.mul(rotation.Value, quaternion.EulerXYZ(0, sign * angle, 0));
+                sheep.TargetRotation = targetRotation;
             }
         }
 
-        private void MoveToLessHeat(ref Translation translation, ref Rotation rotation, ref SheepComponentDataEntity sheep)
+        private void MoveToLessHeat(ref Translation translation, Rotation rotation, ref SheepComponentDataEntity sheep)
         {
             var globalForward = new float3(0, 0, 1);
             
@@ -410,19 +406,19 @@ public class SheepHeardJobSystem : SystemBase
                 {
                     for (var i = 1; i < 4; i++)
                     {
-                        var searchRotation = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread * i * 4, 0));
+                        var searchRotation = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread * i * 2.5f, 0));
                         GetDeltaHeatAtRotation(
                             translation.Value,
                             math.mul(searchRotation, globalForward),
-                            SHEEP_MOVEMENT_SPEED * j,
+                            SHEEP_MOVEMENT_SPEED * j * 1.5f,
                             out var heatValuePositive);
                         positiveSideValue += heatValuePositive;
 
-                        searchRotation = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread * i * -4, 0));
+                        searchRotation = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread * i * -2.5f, 0));
                         GetDeltaHeatAtRotation(
                             translation.Value,
                             math.mul(searchRotation, globalForward),
-                            SHEEP_MOVEMENT_SPEED * j,
+                            SHEEP_MOVEMENT_SPEED * j * 1.5f,
                             out var heatValueNegative);
                         negativeSideValue += heatValueNegative;
                     }
@@ -441,33 +437,27 @@ public class SheepHeardJobSystem : SystemBase
                 
                 if (negativeSideValue == positiveSideValue)
                     sheep.StateExtraInfo = GetRandomNormalizedValue(sheep.UpdateGroupId) > 0.5f ? -1 : 1;
-
-                //Debug.Log(minSideValue);
-                if (minSideValue < 250)
-                {
-                    var randomValue = GetRandomNormalizedValue(sheep.UpdateGroupId);
-                    if (randomValue < 0.3f)
-                        ChangeState(0, ref sheep); //change to gototarget
-                    else if (randomValue < 0.5)
-                        ChangeState(1, ref sheep); //changeto follow trace
-                    else
-                        ChangeState(3, ref sheep); //go to idle
-                }
+               
             }
 
-            rotation.Value = math.mul(rotation.Value, quaternion.EulerXYZ(0, SHEEP_TURN_SPEED * 2 * _scaledDeltaTime * sheep.StateExtraInfo, 0));
+            sheep.TargetRotation = math.mul(rotation.Value, quaternion.EulerXYZ(0, math.PI * sheep.StateExtraInfo * 0.15f, 0));
 
-            if(_executionTime - sheep.LastStateChangeTime > (5 + 15 * GetRandomNormalizedValue(sheep.UpdateGroupId))) //state exit time
+            if (_executionTime - sheep.LastStateChangeTime > (10 * GetRandomNormalizedValue(sheep.UpdateGroupId))) //state exit time
             {
-                ChangeState(0, ref sheep); //change to gototarget
+                ChangeState(GetRandomNormalizedValue(sheep.UpdateGroupId + 1) > 0.6f ? 1 : 2, ref sheep); //change to follow trace or to same state
             }
         }
-        private void MoveAwayFromPoint(ref Translation translation, ref Rotation rotation, ref SheepComponentDataEntity sheep)
+        
+        /// <summary>
+        /// Returns if the entity is moving away form source
+        /// </summary>
+        /// <param name="translation"></param>
+        /// <param name="sheep"></param>
+        /// <returns></returns>
+        private bool MoveAwayFromPoint(ref Translation translation, ref SheepComponentDataEntity sheep)
         {
-            if (sheep.InputRepulseIndex == -1)
-                return;
 
-            var normalizedEscapeDirection = math.normalizesafe(translation.Value.xz - _inputRepulseArray[sheep.InputRepulseIndex].LocalInputPosition);
+            var normalizedEscapeDirection = new float2(0, 1); //TODO: compute proper escape dir
             var escapeRotation = HorizontalLookAtRotation(normalizedEscapeDirection);
 
             var escapeForward = new float3(normalizedEscapeDirection.x, 0, normalizedEscapeDirection.y) * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * sheep.InputRepulseStrength * 3;
@@ -478,9 +468,15 @@ public class SheepHeardJobSystem : SystemBase
             if (canMoveForward)
             {
                 translation.Value += escapeForward;
-                rotation.Value = escapeRotation;
-                return;
+                sheep.TargetRotation = escapeRotation;
             }
+            return true;
+        }
+
+        private void ChangeToRandomState(ref SheepComponentDataEntity sheepDataComponent)
+        {
+            var randomState = (int)(GetRandomNormalizedValue(sheepDataComponent.UpdateGroupId) * 100) % 4;
+            ChangeState(randomState, ref sheepDataComponent);
         }
 
         private void ChangeState(int newState, ref SheepComponentDataEntity sheepDataComponent)
@@ -491,6 +487,16 @@ public class SheepHeardJobSystem : SystemBase
             sheepDataComponent.CurrentState = newState;
             sheepDataComponent.LastStateChangeTime = _executionTime;
             sheepDataComponent.StateExtraInfo = 0;
+        }
+
+        private float ComputeRotationTick(quaternion targetRotation, quaternion originRotation, float rotationTickScale = 1f)
+        {
+            var angle = GetSignedAngleWidthRotations(targetRotation, originRotation, out var sign);
+            var stepAngle = SHEEP_TURN_SPEED * _scaledDeltaTime * rotationTickScale;
+
+            if (angle > stepAngle)
+                angle = stepAngle;
+            return angle * sign;
         }
 
         private float GetSignedAngleWidthRotations(quaternion targetRotation, quaternion originRotation, out float sign)
@@ -527,7 +533,7 @@ public class SheepHeardJobSystem : SystemBase
             var searchPosition = entityPosition + (searchDirection * distance * _worldScale);
 
             if(debug)
-                Debug.DrawLine(entityPosition, searchPosition, Color.yellow);
+                Debug.DrawLine(entityPosition, searchPosition, Color.green);
 
             var mapIndex = LocalPositionToMapIndex(searchPosition, _physicalRectSize, _heatMapSize);
             if (mapIndex != -1)
@@ -544,7 +550,7 @@ public class SheepHeardJobSystem : SystemBase
             var searchPosition = entityPosition + (searchDirection * distance * _worldScale);
             if(debug)
                 Debug.DrawLine(entityPosition, searchPosition, Color.yellow);
-
+            
             var mapIndex = LocalPositionToMapIndex(searchPosition, _physicalRectSize, _heatMapSize);
             if (mapIndex != -1)
             {

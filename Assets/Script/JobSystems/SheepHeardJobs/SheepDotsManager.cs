@@ -97,7 +97,9 @@ public class SheepDotsManager : MonoBehaviour
             typeof(ChunkWorldRenderBounds),
             typeof(PerInstanceCullingTag),
             typeof(RenderMesh),
-            typeof(SheepComponentDataEntity)
+            typeof(URPMaterialPropertyBaseColor),
+            typeof(SheepComponentDataEntity),
+
         });
 
         _sheepEntities = new NativeArray<Entity>(_sheepCount, Allocator.Persistent);
@@ -132,8 +134,8 @@ public class SheepDotsManager : MonoBehaviour
                 {
                     InputAttrackIndex = UnityEngine.Random.Range(0, InputEntityManager.Instance.InputAttractCount),
                     UpdateGroupId = (i % _updateGroupCount),
-                    InputRepulseIndex = -1
-                });
+                    CurrentState = UnityEngine.Random.Range(0, 4)
+                });;
 
             _entityManager.SetComponentData<RenderBounds>(_sheepEntities[i], new RenderBounds { Value = sheepBounds });
 
