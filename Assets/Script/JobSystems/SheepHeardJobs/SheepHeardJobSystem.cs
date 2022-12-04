@@ -17,16 +17,22 @@ public class SheepHeardJobSystem : SystemBase
     private const float SHEEP_TURN_SPEED = 0.045f;
     private EntityQuery _sheepsQuery;
 
-    private RenderTexture _heatBakeTexture;
-    private int2 _heatBakeTextureSize;
-    private float2 _movementHeatRectSize;
+    private RenderTexture _bakedHeatTexture;
+    private int2 _bakedHeatTextureSize;
+    private float2 _mapsPhysicalSize;
 
     private int _codeIterator;
     private Entity _globalParamsEntity;
     private GlobalParams _globalParams;
     private Entity _inputAttractBufferEntity;
     
-    private NativeArray<byte> _bakedTextureData;
+    private NativeArray<byte> _bakedHeatTextureData;
+
+    //input 
+    private bool _initialized = false;
+    private RenderTexture _inputsTexture;
+    private NativeArray<byte> _inputsTextureData;
+    private uint2 _inputTexturesSize;
 
     protected override void OnStartRunning()
     {
@@ -47,55 +53,67 @@ public class SheepHeardJobSystem : SystemBase
         _globalParams = EntityManager.GetComponentData<GlobalParams>(_globalParamsEntity);
         _codeIterator = 0;
 
-        var heatParamsInitialized = InitializeHeatMapParams();
-        if (!heatParamsInitialized)
+    }
+
+    private void InitializeDataTextures() {
+        var query = GetEntityQuery(new ComponentType[] { typeof(PhysicalSizeTexture) });
+        var textureEntities = query.ToEntityArray(Allocator.Temp);
+
+        var inputPhysicalRectSize = new float2(float.MaxValue, float.MaxValue);
+
+        foreach (var entity in textureEntities)
         {
-            Debug.LogError("No heat map found");
+            var physicalSizeTextureComponent = EntityManager.GetSharedComponentData<PhysicalSizeTexture>(entity);
+            if(physicalSizeTextureComponent.Type == TextureTypes.MOVE_HEAT_TEXTURE && _bakedHeatTexture == null)
+            {
+
+                _bakedHeatTexture = physicalSizeTextureComponent.TextureReference;
+                _mapsPhysicalSize = physicalSizeTextureComponent.PhysicalTextureSize;
+                _bakedHeatTextureSize = new int2(_bakedHeatTexture.width, _bakedHeatTexture.height);
+                _bakedHeatTextureData = new NativeArray<byte>(_bakedHeatTexture.width * _bakedHeatTexture.height * 4, Allocator.Persistent);
+            }
+            if(physicalSizeTextureComponent.Type == TextureTypes.INPUT_BAKE_TEXTURE && _inputsTexture == null)
+            {
+                _inputsTexture = physicalSizeTextureComponent.TextureReference;
+                inputPhysicalRectSize = physicalSizeTextureComponent.PhysicalTextureSize;
+                _inputTexturesSize = new uint2((uint)_inputsTexture.width, (uint)_inputsTexture.height);
+                _inputsTextureData = new NativeArray<byte>(_inputsTexture.width * _inputsTexture.height * 4, Allocator.Persistent);
+            }
+        }
+        
+        textureEntities.Dispose();
+
+        if (_inputsTexture == null || _bakedHeatTexture == null)
+            return;
+
+        if(!inputPhysicalRectSize.Equals(_mapsPhysicalSize))
+        {
+            Debug.LogWarning("Bake maps physical size should be the same");
             return;
         }
 
-        RequestTextureToArrayBake();
+        RequestHeatTextureToArrayBake();
+        _initialized = true;
     }
 
-    private bool InitializeHeatMapParams() {
-        var query = GetEntityQuery(new ComponentType[] { typeof(PhysicalSizeTexture) });
-        var textureEntities = query.ToEntityArray(Allocator.Temp);
-        foreach(var entity in textureEntities)
-        {
-            var physicalSizeTextureComponent = EntityManager.GetSharedComponentData<PhysicalSizeTexture>(entity);
-            if(physicalSizeTextureComponent.Type == TextureTypes.MOVE_HEAT_TEXTURE)
-            {
-                _heatBakeTexture = physicalSizeTextureComponent.TextureReference;
-                _movementHeatRectSize = physicalSizeTextureComponent.PhysicalTextureSize;
-                _heatBakeTextureSize = new int2(_heatBakeTexture.width, _heatBakeTexture.height);
-                _bakedTextureData = new NativeArray<byte>(_heatBakeTexture.width * _heatBakeTexture.height * 4, Allocator.Persistent);
-                textureEntities.Dispose();
-                return true;
-            }
-        }
-
-        textureEntities.Dispose();
-        return false;
-    }
-
-    private void RequestTextureToArrayBake()
+    private void RequestHeatTextureToArrayBake()
     {
         AsyncGPUReadback.Request(
-            _heatBakeTexture,
+            _bakedHeatTexture,
             0,
             (req) =>
             {
                 try
                 {
-                    if (!_heatBakeTexture)
+                    if (!_bakedHeatTexture)
                         return;
 
                     //an extra copy here due to unity bug
-                    _bakedTextureData.Dispose();
-                    _bakedTextureData = new NativeArray<byte>(req.GetData<byte>(), Allocator.Persistent);
-                    
+                    _bakedHeatTextureData.Dispose();
+                    _bakedHeatTextureData = new NativeArray<byte>(req.GetData<byte>(), Allocator.Persistent);
+
                     //just repeat the callback on the next frame
-                    RequestTextureToArrayBake();
+                    RequestInputTextureDataCopy();
                 }
                 catch (ObjectDisposedException e)
                 {
@@ -105,13 +123,46 @@ public class SheepHeardJobSystem : SystemBase
             });
     }
 
+
+    private void RequestInputTextureDataCopy()
+    {
+
+        AsyncGPUReadback.Request(
+            _inputsTexture,
+            0,
+            (req) =>
+            {
+                try
+                {
+                    if (!_inputsTexture)
+                        return;
+
+                    //an extra copy here due to unity bug
+                    _inputsTextureData.Dispose();
+                    _inputsTextureData = new NativeArray<byte>(req.GetData<byte>(), Allocator.Persistent);
+
+                    //just repeat the callback on the next frame
+                    RequestHeatTextureToArrayBake();
+                }
+                catch (ObjectDisposedException e)
+                {
+                    Debug.LogWarning($"The native array was disposed {e}");
+                }
+
+            });
+    }
+
+
     protected override void OnDestroy()
     {
-        _bakedTextureData.Dispose();
+        _bakedHeatTextureData.Dispose();
     }
 
     protected override void OnUpdate()
     {
+        if (!_initialized)
+            InitializeDataTextures();
+
         var inputsBuffer = GetBuffer<InputPoint>(_inputAttractBufferEntity);
         var inputAttractArray = inputsBuffer.ToNativeArray(Allocator.TempJob);
 
@@ -125,16 +176,25 @@ public class SheepHeardJobSystem : SystemBase
             GetComponentTypeHandle<URPMaterialPropertyBaseColor>(),
             inputAttractArray,
             randomArrays,
-            _bakedTextureData,
-            _heatBakeTextureSize,
-            _movementHeatRectSize,
+            _bakedHeatTextureData,
+            _bakedHeatTextureSize,
+            _mapsPhysicalSize,
             _globalParams.WorldScale,
             _codeIterator,
             Time.DeltaTime,
             (float)Time.ElapsedTime);
 
         _codeIterator++;
-        Dependency = job.ScheduleParallel(_sheepsQuery);
+        var handle = job.ScheduleParallel(_sheepsQuery);
+
+        var inputJob = new UpdateSheepInputIdJob(
+            GetComponentTypeHandle<Translation>(),
+            GetComponentTypeHandle<SheepComponentDataEntity>(),
+            _inputsTextureData,
+            _inputTexturesSize,
+            _mapsPhysicalSize);
+
+        Dependency = inputJob.ScheduleParallel(_sheepsQuery, 1, handle);
         Dependency.Complete();
 
         if (_codeIterator >= _globalParams.MaxGroups)
@@ -153,7 +213,7 @@ public class SheepHeardJobSystem : SystemBase
         [ReadOnly] private NativeArray<InputPoint> _inputAttractArray;
         [ReadOnly] private NativeArray<RandomData> _randomDataArray;
         [ReadOnly] private NativeArray<byte> _heatMap;
-        private int2 _heatMapSize;
+        private int2 _heatMapDimensions;
         
         private float2 _physicalRectSize;
         private float _worldScale;
@@ -173,7 +233,7 @@ public class SheepHeardJobSystem : SystemBase
             NativeArray<InputPoint> inputAttractArray,
             NativeArray<RandomData> randomDataArray,
             NativeArray<byte> heatMap,
-            int2 heatMapSize,
+            int2 heatMapDimensions,
             float2 physicalRectSize,
             float worldScale,
             int codeIterator,
@@ -189,7 +249,7 @@ public class SheepHeardJobSystem : SystemBase
             _randomDataArray = randomDataArray;
 
             _heatMap = heatMap;
-            _heatMapSize = heatMapSize;
+            _heatMapDimensions = heatMapDimensions;
             _physicalRectSize = physicalRectSize;
             _worldScale = worldScale;
             _codeIterator = codeIterator;
@@ -291,17 +351,23 @@ public class SheepHeardJobSystem : SystemBase
                 var lookAtRotation = HorizontalLookAtRotation(normalizedTargetDirection);
                 
                 var positiveNormalizedSearchRot = math.mul(lookAtRotation, quaternion.EulerXYZ(0, _rotationStepSpread, 0));
-                GetDeltaHeatAtRotation(
+                GetMapDeltaValue(
                     translation.Value,
                     math.mul(positiveNormalizedSearchRot, globalForward),
                     SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * 60,
+                    _heatMap,
+                    _heatMapDimensions,
+                    BakeChannelCode.RED, 
                     out var heatValuePositive);
 
                 var negativeNormalizedSearchRot = math.mul(lookAtRotation, quaternion.EulerXYZ(0, _rotationStepSpread * -1, 0));
-                GetDeltaHeatAtRotation(
+                GetMapDeltaValue(
                     translation.Value,
                     math.mul(negativeNormalizedSearchRot, globalForward),
                     SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * 60,
+                    _heatMap,
+                    _heatMapDimensions,
+                    BakeChannelCode.RED,
                     out var heatValueNegative);
 
 
@@ -327,10 +393,13 @@ public class SheepHeardJobSystem : SystemBase
             var globalForward = new float3(0, 0, 1);
             var canMoveForward = CanMoveForward(translation, rotation, globalForward, out var localForward);
 
-            GetDeltaTraceAtRotation(
+            GetMapDeltaValue(
                 translation.Value,
                 math.mul(rotation.Value, globalForward),
                 SHEEP_MOVEMENT_SPEED * 2,
+                _heatMap,
+                _heatMapDimensions,
+                BakeChannelCode.BLUE,
                 out var forwardValue);
 
             canMoveForward = canMoveForward && forwardValue > 10;
@@ -360,10 +429,13 @@ public class SheepHeardJobSystem : SystemBase
                 for(var i = dirSearchTick * -1; i <= dirSearchTick; i++)
                 {
                     var searchQuat = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread * i, 0));
-                    GetDeltaTraceAtRotation(
+                    GetMapDeltaValue(
                         translation.Value,
                         math.mul(searchQuat, globalForward),
                         SHEEP_MOVEMENT_SPEED * 5,
+                        _heatMap,
+                        _heatMapDimensions,
+                        BakeChannelCode.BLUE,
                         out var traceSearchValue);
                     if(maxValue < traceSearchValue)
                     {
@@ -406,18 +478,24 @@ public class SheepHeardJobSystem : SystemBase
                     for (var i = 1; i < 4; i++)
                     {
                         var searchRotation = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread * i * 2.5f, 0));
-                        GetDeltaHeatAtRotation(
+                        GetMapDeltaValue(
                             translation.Value,
                             math.mul(searchRotation, globalForward),
                             SHEEP_MOVEMENT_SPEED * j * 1.5f,
+                            _heatMap,
+                            _heatMapDimensions,
+                            BakeChannelCode.RED,
                             out var heatValuePositive);
                         positiveSideValue += heatValuePositive;
 
                         searchRotation = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread * i * -2.5f, 0));
-                        GetDeltaHeatAtRotation(
+                        GetMapDeltaValue(
                             translation.Value,
                             math.mul(searchRotation, globalForward),
                             SHEEP_MOVEMENT_SPEED * j * 1.5f,
+                            _heatMap,
+                            _heatMapDimensions,
+                            BakeChannelCode.RED,
                             out var heatValueNegative);
                         negativeSideValue += heatValueNegative;
                     }
@@ -461,7 +539,7 @@ public class SheepHeardJobSystem : SystemBase
 
             var escapeForward = new float3(normalizedEscapeDirection.x, 0, normalizedEscapeDirection.y) * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * sheep.InputRepulseStrength * 3;
             
-            var nextPositionMapIndex = LocalPositionToMapIndex(translation.Value + escapeForward * SHEEP_MOVEMENT_SPEED * 4, _physicalRectSize, _heatMapSize);
+            var nextPositionMapIndex = LocalPositionToMapIndex(translation.Value + escapeForward * SHEEP_MOVEMENT_SPEED * 4, _physicalRectSize, _heatMapDimensions);
 
             var canMoveForward = nextPositionMapIndex != -1 && _heatMap[nextPositionMapIndex] < 200;
             if (canMoveForward)
@@ -526,36 +604,24 @@ public class SheepHeardJobSystem : SystemBase
             return angle;
         }
 
-        private bool GetDeltaHeatAtRotation(float3 entityPosition, float3 searchDirection, float distance,  out byte value, bool debug = false)
+        private bool GetMapDeltaValue(float3 originPosition, float3 deltaDirection, float deltaDistance, NativeArray<byte> map, int2 mapDimensions, BakeChannelCode channel, out byte result, bool debug = false)
         {
-            value = byte.MaxValue;
-            var searchPosition = entityPosition + (searchDirection * distance * _worldScale);
-
-            if(debug)
-                Debug.DrawLine(entityPosition, searchPosition, Color.green);
-
-            var mapIndex = LocalPositionToMapIndex(searchPosition, _physicalRectSize, _heatMapSize);
-            if (mapIndex != -1)
-            {
-                value = _heatMap[mapIndex];
-                return true;
-            }
-            return false;
+            var searchPosition = originPosition + (deltaDirection * deltaDistance * _worldScale);
+            if (debug)
+                Debug.DrawLine(originPosition, searchPosition, Color.green);
+            return GetMapValue(searchPosition, map, mapDimensions, channel, out result);
         }
 
-        private bool GetDeltaTraceAtRotation(float3 entityPosition, float3 searchDirection, float distance, out byte value, bool debug = false)
+        private bool GetMapValue(float3 position, NativeArray<byte> map, int2 mapDimensions, BakeChannelCode channel, out byte result)
         {
-            value = byte.MaxValue;
-            var searchPosition = entityPosition + (searchDirection * distance * _worldScale);
-            if(debug)
-                Debug.DrawLine(entityPosition, searchPosition, Color.yellow);
-            
-            var mapIndex = LocalPositionToMapIndex(searchPosition, _physicalRectSize, _heatMapSize);
+
+            var mapIndex = LocalPositionToMapIndex(position, _physicalRectSize, mapDimensions);
             if (mapIndex != -1)
             {
-                value = _heatMap[mapIndex + 2];
+                result = _heatMap[mapIndex + (int)channel];
                 return true;
             }
+            result = byte.MaxValue;
             return false;
         }
 
@@ -584,7 +650,7 @@ public class SheepHeardJobSystem : SystemBase
         {
             var normalizedLocalForward = math.mul(rotation.Value, globalForward);
             localForward = normalizedLocalForward * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * _worldScale;
-            var localForwardHeatMapIndex = LocalPositionToMapIndex(translation.Value + localForward * SHEEP_MOVEMENT_SPEED * forwardSearchScale, _physicalRectSize, _heatMapSize);
+            var localForwardHeatMapIndex = LocalPositionToMapIndex(translation.Value + localForward * SHEEP_MOVEMENT_SPEED * forwardSearchScale, _physicalRectSize, _heatMapDimensions);
             //Debug.Log(_heatMap[localForwardHeatMapIndex]);
             return (localForwardHeatMapIndex != -1 && _heatMap[localForwardHeatMapIndex] < ThresholdValue);
         }
@@ -608,6 +674,13 @@ public class SheepHeardJobSystem : SystemBase
         private float GetRandomNormalizedValue(int seed)
         {
             return _randomDataArray[(seed % _randomDataArray.Length)].Value;
+        }
+
+        private enum BakeChannelCode
+        {
+            RED = 0,
+            GREEN = 1,
+            BLUE = 2
         }
     }
 }
