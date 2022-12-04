@@ -544,6 +544,9 @@ public class SheepHeardJobSystem : SystemBase
         /// <returns></returns>
         private bool MoveAwayFromPoint(ref Translation translation, ref SheepComponentDataEntity sheep)
         {
+            GetMapValue(translation.Value, _inputRepulseMap, _inputRepulseMapDimensions, BakeChannelCode.RED, out var value);
+            if (value < 20)
+                return false;
 
             var normalizedEscapeDirection = new float2(0, 1); //TODO: compute proper escape dir
             var escapeRotation = HorizontalLookAtRotation(normalizedEscapeDirection);
@@ -629,7 +632,7 @@ public class SheepHeardJobSystem : SystemBase
             var mapIndex = LocalPositionToMapIndex(position, _physicalMapsSize, mapDimensions);
             if (mapIndex != -1)
             {
-                result = _heatMap[mapIndex + (int)channel];
+                result = map[mapIndex + (int)channel];
                 return true;
             }
             result = byte.MaxValue;
