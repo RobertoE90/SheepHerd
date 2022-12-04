@@ -32,7 +32,7 @@ public class SheepHeardJobSystem : SystemBase
     private bool _initialized = false;
     private RenderTexture _inputsTexture;
     private NativeArray<byte> _inputsTextureData;
-    private uint2 _inputTexturesSize;
+    private int2 _inputTexturesSize;
 
     protected override void OnStartRunning()
     {
@@ -76,7 +76,7 @@ public class SheepHeardJobSystem : SystemBase
             {
                 _inputsTexture = physicalSizeTextureComponent.TextureReference;
                 inputPhysicalRectSize = physicalSizeTextureComponent.PhysicalTextureSize;
-                _inputTexturesSize = new uint2((uint)_inputsTexture.width, (uint)_inputsTexture.height);
+                _inputTexturesSize = new int2(_inputsTexture.width, _inputsTexture.height);
                 _inputsTextureData = new NativeArray<byte>(_inputsTexture.width * _inputsTexture.height * 4, Allocator.Persistent);
             }
         }
@@ -178,6 +178,8 @@ public class SheepHeardJobSystem : SystemBase
             randomArrays,
             _bakedHeatTextureData,
             _bakedHeatTextureSize,
+            _inputsTextureData,
+            _inputTexturesSize,
             _mapsPhysicalSize,
             _globalParams.WorldScale,
             _codeIterator,
@@ -214,8 +216,11 @@ public class SheepHeardJobSystem : SystemBase
         [ReadOnly] private NativeArray<RandomData> _randomDataArray;
         [ReadOnly] private NativeArray<byte> _heatMap;
         private int2 _heatMapDimensions;
-        
-        private float2 _physicalRectSize;
+
+        [ReadOnly] private NativeArray<byte> _inputRepulseMap;
+        private int2 _inputRepulseMapDimensions;
+
+        private float2 _physicalMapsSize;
         private float _worldScale;
 
         private int _codeIterator;
@@ -234,7 +239,9 @@ public class SheepHeardJobSystem : SystemBase
             NativeArray<RandomData> randomDataArray,
             NativeArray<byte> heatMap,
             int2 heatMapDimensions,
-            float2 physicalRectSize,
+            NativeArray<byte> inputRepulseMap,
+            int2 inputRepulseMapDimensions,
+            float2 physicalMapsSize,
             float worldScale,
             int codeIterator,
             float deltaTime,
@@ -250,7 +257,11 @@ public class SheepHeardJobSystem : SystemBase
 
             _heatMap = heatMap;
             _heatMapDimensions = heatMapDimensions;
-            _physicalRectSize = physicalRectSize;
+
+            _inputRepulseMap = inputRepulseMap;
+            _inputRepulseMapDimensions = inputRepulseMapDimensions;
+
+            _physicalMapsSize = physicalMapsSize;
             _worldScale = worldScale;
             _codeIterator = codeIterator;
 
@@ -539,7 +550,7 @@ public class SheepHeardJobSystem : SystemBase
 
             var escapeForward = new float3(normalizedEscapeDirection.x, 0, normalizedEscapeDirection.y) * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * sheep.InputRepulseStrength * 3;
             
-            var nextPositionMapIndex = LocalPositionToMapIndex(translation.Value + escapeForward * SHEEP_MOVEMENT_SPEED * 4, _physicalRectSize, _heatMapDimensions);
+            var nextPositionMapIndex = LocalPositionToMapIndex(translation.Value + escapeForward * SHEEP_MOVEMENT_SPEED * 4, _physicalMapsSize, _heatMapDimensions);
 
             var canMoveForward = nextPositionMapIndex != -1 && _heatMap[nextPositionMapIndex] < 200;
             if (canMoveForward)
@@ -615,7 +626,7 @@ public class SheepHeardJobSystem : SystemBase
         private bool GetMapValue(float3 position, NativeArray<byte> map, int2 mapDimensions, BakeChannelCode channel, out byte result)
         {
 
-            var mapIndex = LocalPositionToMapIndex(position, _physicalRectSize, mapDimensions);
+            var mapIndex = LocalPositionToMapIndex(position, _physicalMapsSize, mapDimensions);
             if (mapIndex != -1)
             {
                 result = _heatMap[mapIndex + (int)channel];
@@ -650,7 +661,7 @@ public class SheepHeardJobSystem : SystemBase
         {
             var normalizedLocalForward = math.mul(rotation.Value, globalForward);
             localForward = normalizedLocalForward * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * _worldScale;
-            var localForwardHeatMapIndex = LocalPositionToMapIndex(translation.Value + localForward * SHEEP_MOVEMENT_SPEED * forwardSearchScale, _physicalRectSize, _heatMapDimensions);
+            var localForwardHeatMapIndex = LocalPositionToMapIndex(translation.Value + localForward * SHEEP_MOVEMENT_SPEED * forwardSearchScale, _physicalMapsSize, _heatMapDimensions);
             //Debug.Log(_heatMap[localForwardHeatMapIndex]);
             return (localForwardHeatMapIndex != -1 && _heatMap[localForwardHeatMapIndex] < ThresholdValue);
         }

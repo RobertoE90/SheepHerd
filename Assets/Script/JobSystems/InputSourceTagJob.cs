@@ -10,14 +10,14 @@ public struct UpdateSheepInputIdJob : IJobEntityBatch
     public ComponentTypeHandle<SheepComponentDataEntity> _sheepType;
     [ReadOnly] private NativeArray<byte> _inputIdMap;
 
-    private uint2 _inputIdMapSize;
+    private int2 _inputIdMapSize;
     private float2 _physicalRectSize;
 
     public UpdateSheepInputIdJob(
         ComponentTypeHandle<Translation> t,
         ComponentTypeHandle<SheepComponentDataEntity> sheepComponent,
         NativeArray<byte> idMap,
-        uint2 idMapSize,
+        int2 idMapSize,
         float2 physicalRectSize)
     {
         _translationType = t;
