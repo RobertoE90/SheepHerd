@@ -152,7 +152,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e78a1f7f5dd9aba41ab7c8256fab056c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _sheepCount: 5000
+  _sheepCount: 50000
   _spawnSquareSide: 300
   _updateGroupCount: 100
   _worldScale: 0.01

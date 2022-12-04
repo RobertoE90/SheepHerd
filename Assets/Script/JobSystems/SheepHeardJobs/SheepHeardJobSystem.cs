@@ -305,7 +305,7 @@ public class SheepHeardJobSystem : SystemBase
                         break;
                 }
 
-                var movingAway = MoveAwayFromPoint(ref translation, ref sheep);
+                var movingAway = MoveAwayFromPoint(ref translation, ref rotation, ref sheep);
                 if(movingAway)
                     color.Value = new float4(1, 0, 0, 0);
                 
@@ -542,25 +542,46 @@ public class SheepHeardJobSystem : SystemBase
         /// <param name="translation"></param>
         /// <param name="sheep"></param>
         /// <returns></returns>
-        private bool MoveAwayFromPoint(ref Translation translation, ref SheepComponentDataEntity sheep)
+        private bool MoveAwayFromPoint(ref Translation translation, ref Rotation rotation, ref SheepComponentDataEntity sheep)
         {
             GetMapValue(translation.Value, _inputRepulseMap, _inputRepulseMapDimensions, BakeChannelCode.RED, out var value);
             if (value < 20)
                 return false;
 
-            var normalizedEscapeDirection = new float2(0, 1); //TODO: compute proper escape dir
-            var escapeRotation = HorizontalLookAtRotation(normalizedEscapeDirection);
-
-            var escapeForward = new float3(normalizedEscapeDirection.x, 0, normalizedEscapeDirection.y) * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * sheep.InputRepulseStrength * 3;
-            
-            var nextPositionMapIndex = LocalPositionToMapIndex(translation.Value + escapeForward * SHEEP_MOVEMENT_SPEED * 4, _physicalMapsSize, _heatMapDimensions);
-
-            var canMoveForward = nextPositionMapIndex != -1 && _heatMap[nextPositionMapIndex] < 200;
-            if (canMoveForward)
+            var checkSectorCount = 8f;
+            var maxRepulseValue = 0;
+            var tick = math.PI * 2 / checkSectorCount;
+            var maxRepulseRot = quaternion.identity;
+            var globalForward = new float3(0, 0, 1);
+            for(var i = 0; i < checkSectorCount; i++)
             {
-                translation.Value += escapeForward;
-                sheep.TargetRotation = escapeRotation;
+                var deltaRotation = quaternion.Euler(0, i * tick , 0);
+                GetMapDeltaValue(
+                    translation.Value,
+                    math.mul(deltaRotation, globalForward),
+                    SHEEP_MOVEMENT_SPEED * 2f,
+                    _inputRepulseMap,
+                    _inputRepulseMapDimensions,
+                    BakeChannelCode.RED,
+                    out value);
+
+                if(maxRepulseValue < value)
+                {
+                    maxRepulseValue = value;
+                    maxRepulseRot = deltaRotation;
+                }
             }
+
+            sheep.TargetRotation = math.mul(maxRepulseRot, quaternion.Euler(0, math.PI, 0));
+            var slidePos = translation.Value + math.mul(sheep.TargetRotation, globalForward) * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * 0.025f;
+            var canSlide = GetMapValue(slidePos, _heatMap, _heatMapDimensions, BakeChannelCode.RED, out var result);
+            if (canSlide)
+            {
+                translation.Value = slidePos;
+                if (CanMoveForward(translation, rotation, globalForward, out var resultDeltaForward))
+                    translation.Value += resultDeltaForward * 2f;
+            }
+           
             return true;
         }
 
