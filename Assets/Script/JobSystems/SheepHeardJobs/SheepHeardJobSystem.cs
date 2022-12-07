@@ -393,9 +393,9 @@ public class SheepHeardJobSystem : SystemBase
                 }
 
                 sheep.TargetRotation = targetRotation;
-                if (_executionTime - sheep.LastStateChangeTime > 150) {
-                    var randomValue = GetRandomNormalizedValue(sheep.UpdateGroupId);
-                    ChangeState(randomValue > 0.6f ? 1 : 0, ref sheep);
+                if (_executionTime - sheep.LastStateChangeTime > 50 * GetRandomNormalizedValue(sheep.UpdateGroupId)) {
+                    var randomValue = GetRandomNormalizedValue(sheep.UpdateGroupId + 1);
+                    ChangeState(randomValue > 0.7f ? 1 : 0, ref sheep);
                 }
             }
         }
@@ -435,21 +435,26 @@ public class SheepHeardJobSystem : SystemBase
 
             if (_codeIterator == sheep.UpdateGroupId)
             {
+                var normalizedTargetDirection = math.normalizesafe(_inputAttractArray[sheep.InputAttrackIndex].LocalInputPosition - translation.Value.xz);
+
                 var dirSearchTick = 2;
                 var maxValue = 0;
                 quaternion targetRotation = quaternion.identity;
                 for(var i = dirSearchTick * -1; i <= dirSearchTick; i++)
                 {
-                    var searchQuat = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread * i, 0));
+                    var searchQuat = math.mul(rotation.Value, quaternion.EulerXYZ(0, _rotationStepSpread * i * 2, 0));
+                    var searchForward = math.mul(searchQuat, globalForward);
+
                     GetMapDeltaValue(
                         translation.Value,
-                        math.mul(searchQuat, globalForward),
+                        searchForward,
                         SHEEP_MOVEMENT_SPEED * 5,
                         _heatMap,
                         _heatMapDimensions,
                         BakeChannelCode.BLUE,
                         out var traceSearchValue);
-                    if(maxValue < traceSearchValue)
+
+                    if(maxValue < traceSearchValue * math.dot(searchForward.xz, normalizedTargetDirection))
                     {
                         maxValue = traceSearchValue;
                         targetRotation = searchQuat;
