@@ -152,10 +152,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e78a1f7f5dd9aba41ab7c8256fab056c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _sheepCount: 50000
-  _spawnSquareSide: 300
+  _sheepCount: 10000
+  _spawnSquareSide: 200
   _updateGroupCount: 100
-  _worldScale: 0.01
+  _worldScale: 0.02
   _sheepMesh: {fileID: -321270947451227426, guid: 084a6772ad5fea64d8a9159f658e0121, type: 3}
   _sheepMaterial: {fileID: 2100000, guid: 8266e1a19b69a1d4b825935e0b377686, type: 2}
   _cameraBakers:
@@ -430,7 +430,7 @@ MonoBehaviour:
   writeToBakedTexture: 1
   _bakeTexturePPU: 2
   CAMERA_DEPTH: 10
-  _decalQuadSideSize: 10
+  _decalQuadSideSize: 13
 --- !u!4 &532375547
 Transform:
   m_ObjectHideFlags: 0
@@ -745,6 +745,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 37377155929411848979154a084de601, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  _movementHeatBakeController: {fileID: 532375546}
   _attractTargets:
   - {fileID: 186520611}
   - {fileID: 340073945}

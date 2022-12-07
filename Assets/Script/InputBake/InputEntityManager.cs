@@ -5,7 +5,7 @@ using UnityEngine;
 
 public class InputEntityManager : MonoBehaviour
 {
-
+    [SerializeField] private MovementHeatBakeController _movementHeatBakeController;
     [SerializeField] private Transform[] _attractTargets;
     public int InputAttractCount => _attractTargets.Length;
     
@@ -168,7 +168,10 @@ public class InputEntityManager : MonoBehaviour
 
     private void Update()
     {
-        if (_attractTargets == null || _attractTargets.Length == 0 || _inputBakeTexture == null)
+        if (_attractTargets == null || 
+            _attractTargets.Length == 0 || 
+            _inputBakeTexture == null ||
+            _movementHeatBakeController.BakeTexture == null)
             return;
 
         var inputBakeKernel = _bakeComputeShader.FindKernel("InputAttractBake");
@@ -185,10 +188,13 @@ public class InputEntityManager : MonoBehaviour
             _bakeComputeShader.SetInt("InputRepulseBufferCount", inputRepulsionBufferData.count);
         }
 
-        _bakeComputeShader.SetInt("TextureWidth", _inputBakeTexture.width);
-        _bakeComputeShader.SetInt("TextureHeight", _inputBakeTexture.height);
+        _bakeComputeShader.SetInt("InputTextureWidth", _inputBakeTexture.width);
+        _bakeComputeShader.SetInt("InputTextureHeight", _inputBakeTexture.height);
 
-
+        _bakeComputeShader.SetTexture(inputBakeKernel, "HeatTexture", _movementHeatBakeController.BakeTexture);
+        _bakeComputeShader.SetInt("HeatTextureWidth", _movementHeatBakeController.TextureSize.x);
+        _bakeComputeShader.SetInt("HeatTextureHeight", _movementHeatBakeController.TextureSize.x);
+        
         _bakeComputeShader.Dispatch(
             inputBakeKernel,
             _inputBakeTexture.width / 4,

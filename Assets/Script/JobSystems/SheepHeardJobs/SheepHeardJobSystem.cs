@@ -14,7 +14,7 @@ using Unity.Rendering;
 public class SheepHeardJobSystem : SystemBase
 {
     private const float SHEEP_MOVEMENT_SPEED = 1f;
-    private const float SHEEP_TURN_SPEED = 0.045f;
+    private const float SHEEP_TURN_SPEED = 0.085f;
     private EntityQuery _sheepsQuery;
 
     private RenderTexture _bakedHeatTexture;
@@ -303,16 +303,16 @@ public class SheepHeardJobSystem : SystemBase
                         color.Value = new float4(1, 0, 1, 0);
                         Idle(ref sheep, translation.Value);
                         break;
+                    case 4: //run away
+                        RepulseBehavior(ref translation, ref rotation, ref sheep);
+                        color.Value = new float4(1, 0, 0, 0);
+                        break;
                 }
 
-                var movingAway = MoveAwayFromPoint(ref translation, ref rotation, ref sheep);
-                if(movingAway)
-                    color.Value = new float4(1, 0, 0, 0);
-                
-                var rotationSpeed = movingAway ? 1f : 5f;
+                CheckForRunAwayState(ref translation, ref sheep);
                 
                 //rotate to target
-                var rotationTick = ComputeRotationTick(sheep.TargetRotation, rotation.Value, rotationSpeed);
+                var rotationTick = ComputeRotationTick(sheep.TargetRotation, rotation.Value);
                 rotation.Value = math.mul(rotation.Value, quaternion.EulerXYZ(0, rotationTick, 0));
                 rotations[i] = rotation;
 
@@ -321,6 +321,7 @@ public class SheepHeardJobSystem : SystemBase
                 colors[i] = color;
             }
         }
+
 
         private void Idle(ref SheepComponentDataEntity sheep, float3 pos)
         {
@@ -535,54 +536,87 @@ public class SheepHeardJobSystem : SystemBase
                 ChangeState(GetRandomNormalizedValue(sheep.UpdateGroupId + 1) > 0.6f ? 1 : 2, ref sheep); //change to follow trace or to same state
             }
         }
-        
-        /// <summary>
-        /// Returns if the entity is moving away form source
-        /// </summary>
-        /// <param name="translation"></param>
-        /// <param name="sheep"></param>
-        /// <returns></returns>
-        private bool MoveAwayFromPoint(ref Translation translation, ref Rotation rotation, ref SheepComponentDataEntity sheep)
+
+        private void RepulseBehavior(ref Translation translation, ref Rotation rotation, ref SheepComponentDataEntity sheep)
+        {
+            var globalForward = new float3(0, 0, 1);
+
+            if (CanMoveForward(translation, rotation, globalForward, out var resultDeltaForward, ThresholdValue:240))
+                translation.Value += resultDeltaForward * 2f;
+            else
+            {
+                //search for clear path
+                var minValue = float.MaxValue;
+                var targetRotation = sheep.TargetRotation;
+                for (var i = -1; i <= 1; i++)
+                {
+                    var searchRot = math.mul(sheep.TargetRotation, quaternion.Euler(0, _rotationStepSpread * 2, 0));
+                    GetMapDeltaValue(
+                        translation.Value,
+                        math.mul(searchRot, globalForward),
+                        SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * 60,
+                        _heatMap,
+                        _heatMapDimensions,
+                        BakeChannelCode.RED,
+                        out var heatValue);
+
+                    if (heatValue < minValue)
+                    {
+                        minValue = heatValue;
+                        targetRotation = sheep.TargetRotation;
+                    }
+                }
+
+                sheep.TargetRotation = targetRotation;
+                rotation.Value = math.slerp(rotation.Value, sheep.TargetRotation, 0.15f);
+            }
+            
+            if (_codeIterator == sheep.UpdateGroupId)
+            {
+                var checkSectorCount = 8f;
+                var maxRepulseValue = sheep.StateExtraInfo;
+                var tick = math.PI * 2 / checkSectorCount;
+                var maxRepulseRot = quaternion.identity;
+                var found = false;
+                for (var i = 0; i < checkSectorCount; i++)
+                {
+                    var deltaRotation = math.mul(rotation.Value, quaternion.Euler(0, i * tick, 0));
+                    GetMapDeltaValue(
+                        translation.Value,
+                        math.mul(deltaRotation, globalForward),
+                        SHEEP_MOVEMENT_SPEED * 2f,
+                        _inputRepulseMap,
+                        _inputRepulseMapDimensions,
+                        BakeChannelCode.RED,
+                        out var value);
+
+                    if (maxRepulseValue < value)
+                    {
+                        found = true;
+                        maxRepulseValue = value;
+                        maxRepulseRot = deltaRotation;
+                    }
+                }
+
+                if (found)
+                {
+                    sheep.StateExtraInfo = maxRepulseValue;
+                    sheep.TargetRotation = math.mul(maxRepulseRot, quaternion.Euler(0, math.PI, 0));
+                }
+
+
+                rotation.Value = math.slerp(rotation.Value, sheep.TargetRotation, 0.05f * _scaledDeltaTime);
+                ChangeToRandomState(ref sheep); //change to follow trace or to same state
+                
+            }
+        }
+
+
+        private void CheckForRunAwayState(ref Translation translation, ref SheepComponentDataEntity sheep)
         {
             GetMapValue(translation.Value, _inputRepulseMap, _inputRepulseMapDimensions, BakeChannelCode.RED, out var value);
-            if (value < 20)
-                return false;
-
-            var checkSectorCount = 8f;
-            var maxRepulseValue = 0;
-            var tick = math.PI * 2 / checkSectorCount;
-            var maxRepulseRot = quaternion.identity;
-            var globalForward = new float3(0, 0, 1);
-            for(var i = 0; i < checkSectorCount; i++)
-            {
-                var deltaRotation = quaternion.Euler(0, i * tick , 0);
-                GetMapDeltaValue(
-                    translation.Value,
-                    math.mul(deltaRotation, globalForward),
-                    SHEEP_MOVEMENT_SPEED * 2f,
-                    _inputRepulseMap,
-                    _inputRepulseMapDimensions,
-                    BakeChannelCode.RED,
-                    out value);
-
-                if(maxRepulseValue < value)
-                {
-                    maxRepulseValue = value;
-                    maxRepulseRot = deltaRotation;
-                }
-            }
-
-            sheep.TargetRotation = math.mul(maxRepulseRot, quaternion.Euler(0, math.PI, 0));
-            var slidePos = translation.Value + math.mul(sheep.TargetRotation, globalForward) * SHEEP_MOVEMENT_SPEED * _scaledDeltaTime * 0.025f;
-            var canSlide = GetMapValue(slidePos, _heatMap, _heatMapDimensions, BakeChannelCode.RED, out var result);
-            if (canSlide)
-            {
-                translation.Value = slidePos;
-                if (CanMoveForward(translation, rotation, globalForward, out var resultDeltaForward))
-                    translation.Value += resultDeltaForward * 2f;
-            }
-           
-            return true;
+            if (value > 20)
+                ChangeState(4, ref sheep);
         }
 
         private void ChangeToRandomState(ref SheepComponentDataEntity sheepDataComponent)
@@ -601,10 +635,10 @@ public class SheepHeardJobSystem : SystemBase
             sheepDataComponent.StateExtraInfo = 0;
         }
 
-        private float ComputeRotationTick(quaternion targetRotation, quaternion originRotation, float rotationTickScale = 1f)
+        private float ComputeRotationTick(quaternion targetRotation, quaternion originRotation)
         {
             var angle = GetSignedAngleWidthRotations(targetRotation, originRotation, out var sign);
-            var stepAngle = SHEEP_TURN_SPEED * _scaledDeltaTime * rotationTickScale;
+            var stepAngle = SHEEP_TURN_SPEED * _scaledDeltaTime;
 
             if (angle > stepAngle)
                 angle = stepAngle;

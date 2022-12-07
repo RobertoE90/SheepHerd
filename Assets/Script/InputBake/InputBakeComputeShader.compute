@@ -14,8 +14,12 @@ struct InputAttractData
 };
 
 RWTexture2D<float4> InputTexture;
-int TextureWidth;
-int TextureHeight;
+int InputTextureWidth;
+int InputTextureHeight;
+
+RWTexture2D<float4> HeatTexture;
+int HeatTextureWidth;
+int HeatTextureHeight;
 
 StructuredBuffer<InputRepulseData> InputRepulseDataBuffer;
 int InputRepulseBufferCount = 0;
@@ -53,15 +57,31 @@ float GetInputAreaValue(float2 inputUV, float2 pixelUV, float expansionValue) //
     return areaValue;
 }
 
+float ExpandChannelValue(float channelValue, float2 pixelPosition) {
+    if (channelValue > 0.1) {
+        return channelValue;
+    }
+
+    float max = channelValue;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            float searchValue = InputTexture[pixelPosition + float2(x, y)].x;
+            if (searchValue > max) {
+                max = searchValue;
+            }
+        }
+    }
+    return max - 0.01;
+}
+
 [numthreads(4,4,1)]
 void InputAttractBake(uint3 id : SV_DispatchThreadID)
 {
-    float2 pixelUv = float2(id.x / (float)TextureWidth, id.y / (float)TextureHeight);
+    float2 pixelUv = float2(id.x / (float)InputTextureWidth, id.y / (float)InputTextureHeight);
 
     float attractCode = ComputeAttractValue(pixelUv);
 
     //get repulse values 
-    //float repulseCode = ComputeRepulseValue(id.xy, pixelUv);
     float repulseHeatValue = InputTexture[id.xy].x;
 
     for (int i = 0; i < InputRepulseBufferCount; i++) {
@@ -71,6 +91,13 @@ void InputAttractBake(uint3 id : SV_DispatchThreadID)
     }
 
     repulseHeatValue = repulseHeatValue - 0.01;
+
+
+    int2 heatPixel = int2(pixelUv.x * HeatTextureWidth, pixelUv.y * HeatTextureHeight);
+    if (HeatTexture[heatPixel].x > 0.85) {
+        repulseHeatValue = ExpandChannelValue(repulseHeatValue, id.xy);
+    }
+
     InputTexture[id.xy] = float4(repulseHeatValue, 0.0, attractCode, 1.0);
 }
 
