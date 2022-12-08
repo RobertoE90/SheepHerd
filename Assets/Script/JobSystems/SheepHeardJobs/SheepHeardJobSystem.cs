@@ -575,14 +575,15 @@ public class SheepHeardJobSystem : SystemBase
                 sheep.TargetRotation = targetRotation;
                 rotation.Value = math.slerp(rotation.Value, sheep.TargetRotation, 0.15f);
             }
-            
+
             if (_codeIterator == sheep.UpdateGroupId)
             {
                 var checkSectorCount = 8f;
-                var maxRepulseValue = sheep.StateExtraInfo;
+                var maxRepulseValue = int.MaxValue;
                 var tick = math.PI * 2 / checkSectorCount;
                 var maxRepulseRot = quaternion.identity;
-                var found = false;
+
+
                 for (var i = 0; i < checkSectorCount; i++)
                 {
                     var deltaRotation = math.mul(rotation.Value, quaternion.Euler(0, i * tick, 0));
@@ -593,26 +594,31 @@ public class SheepHeardJobSystem : SystemBase
                         _inputRepulseMap,
                         _inputRepulseMapDimensions,
                         BakeChannelCode.RED,
-                        out var value);
+                        out var repulseValue);
 
-                    if (maxRepulseValue < value)
+                    GetMapDeltaValue(
+                        translation.Value,
+                        math.mul(deltaRotation, globalForward),
+                        SHEEP_MOVEMENT_SPEED * 2f,
+                        _heatMap,
+                        _heatMapDimensions,
+                        BakeChannelCode.RED,
+                        out var heatValue);
+
+                    if (maxRepulseValue < (heatValue + repulseValue))
                     {
-                        found = true;
-                        maxRepulseValue = value;
+                        maxRepulseValue = (heatValue + repulseValue);
                         maxRepulseRot = deltaRotation;
                     }
                 }
-
-                if (found)
-                {
-                    sheep.StateExtraInfo = maxRepulseValue;
-                    sheep.TargetRotation = math.mul(maxRepulseRot, quaternion.Euler(0, math.PI, 0));
-                }
-
-
-                rotation.Value = math.slerp(rotation.Value, sheep.TargetRotation, 0.05f * _scaledDeltaTime);
-                ChangeToRandomState(ref sheep); //change to follow trace or to same state
                 
+                sheep.TargetRotation = math.mul(maxRepulseRot, quaternion.Euler(0, math.PI, 0));
+                sheep.TargetRotation = math.mul(rotation.Value, sheep.TargetRotation);
+                
+                rotation.Value = math.slerp(rotation.Value, sheep.TargetRotation, 0.5f * _scaledDeltaTime);
+
+                if (GetRandomNormalizedValue(sheep.UpdateGroupId) > 0.75f)
+                    ChangeToRandomState(ref sheep); //less heat search state
             }
         }
 

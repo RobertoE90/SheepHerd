@@ -7,14 +7,10 @@ using UnityEngine;
 
 public class PositionIDBakeController : BaseEntityCameraBaker
 {
-    private static int _ppuCopy;
-    public static int BakeTexturePPU => _ppuCopy;
-
-    public override void Initialize(int referencesCount, Vector2 bakeArea, float worldScale, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
+    public override void Initialize(int referencesCount, Vector2 bakeArea, float texturePPU, float worldScale, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
     {
-        base.Initialize(referencesCount, bakeArea, worldScale, centerWorldPosition, centerWorldRotation);
+        Initialize(bakeArea, texturePPU, worldScale, centerWorldPosition, centerWorldRotation);
         SpawnPositionIdBakers(referencesCount, worldScale);
-        _ppuCopy = _bakeTexturePPU;
         SpawnEntityIdTextureBakeEntity(bakeArea * worldScale, _bakeTexture);
     }
 
@@ -79,7 +75,6 @@ public class PositionIDBakeController : BaseEntityCameraBaker
         bakerEntities.Dispose();
     }
 
-
     private void SpawnEntityIdTextureBakeEntity(float2 bakeRectSize, RenderTexture bakeTexture)
     {
         var entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
@@ -96,6 +91,5 @@ public class PositionIDBakeController : BaseEntityCameraBaker
                 TextureReference = bakeTexture,
                 Type = TextureTypes.ENTITY_ID_TEXTURE
             });
-
     }
 }

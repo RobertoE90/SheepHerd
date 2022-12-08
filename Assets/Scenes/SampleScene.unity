@@ -152,10 +152,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e78a1f7f5dd9aba41ab7c8256fab056c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _sheepCount: 5000
+  _sheepCount: 10000
   _spawnSquareSide: 200
-  _updateGroupCount: 100
-  _worldScale: 0.03
+  _updateGroupCount: 50
+  _worldScale: 0.05
   _sheepMesh: {fileID: -321270947451227426, guid: 084a6772ad5fea64d8a9159f658e0121, type: 3}
   _sheepMaterial: {fileID: 2100000, guid: 8266e1a19b69a1d4b825935e0b377686, type: 2}
   _cameraBakers:
@@ -298,7 +298,7 @@ Transform:
   m_GameObject: {fileID: 60525486}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: -0.05, z: 0}
-  m_LocalScale: {x: 3, y: 0.1, z: 3}
+  m_LocalScale: {x: 5, y: 0.1, z: 5}
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 5
@@ -473,7 +473,7 @@ Transform:
   m_GameObject: {fileID: 615007617}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.005, y: 0.01, z: 0.005}
+  m_LocalScale: {x: 0.02, y: 0.01, z: 0.02}
   m_Children:
   - {fileID: 186520611}
   - {fileID: 340073945}
@@ -1375,7 +1375,7 @@ Transform:
   m_GameObject: {fileID: 1449835947}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.005, y: 1, z: 0.005}
+  m_LocalScale: {x: 0.01, y: 1, z: 0.01}
   m_Children:
   - {fileID: 1275174423}
   - {fileID: 514087784}

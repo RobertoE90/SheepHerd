@@ -8,18 +8,11 @@ using UnityEngine;
 public class MovementHeatBakeController : BaseEntityCameraBaker
 {
     [SerializeField] private float _decalQuadSideSize;
-    public override void Initialize(int referencesCount, Vector2 bakeArea, float worldScale, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
+    public override void Initialize(int referencesCount, Vector2 bakeArea, float texturePPU, float worldScale, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
     {
-        base.Initialize(referencesCount, bakeArea, worldScale, centerWorldPosition, centerWorldRotation);
-        _isInitialized = false;
-
-//        var heatDecalGenerator = new MoveHeatDecalGenerator(_decalImageSideSize, _decalImageSideSize);
-//        _bakeMaterial.SetTexture("_BaseMap", heatDecalGenerator.BakedTexture);
-
+        Initialize(bakeArea, texturePPU, worldScale, centerWorldPosition, centerWorldRotation);
         SpawnHeatMovementBakers(referencesCount, worldScale);
         SpawnHeatBakeBufferEntity(bakeArea * worldScale, _bakeTexture);
-
-        _isInitialized = true;
     }
 
     private void SpawnHeatMovementBakers(int referencesCount, float worldScale)
@@ -86,6 +79,5 @@ public class MovementHeatBakeController : BaseEntityCameraBaker
                 TextureReference = bakeTexture,
                 Type = TextureTypes.MOVE_HEAT_TEXTURE
             });
-
     }
 }

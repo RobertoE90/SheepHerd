@@ -55,12 +55,12 @@ public class InputEntityManager : MonoBehaviour
         _originTransform = Matrix4x4.identity;
     }
 
-    public void Initialize(Vector2 bakeSize, float worldScale)
+    public void Initialize(Vector2 bakeSize, float worldScale, float texturePPU)
     {
         _bakeSize = bakeSize * worldScale;
         _inputBakeTexture = new RenderTexture(
-            (int)bakeSize.x * PositionIDBakeController.BakeTexturePPU, 
-            (int)bakeSize.y * PositionIDBakeController.BakeTexturePPU, 
+            (int)(bakeSize.x * texturePPU), 
+            (int)(bakeSize.y * texturePPU), 
             0, 
             RenderTextureFormat.ARGB32);
 

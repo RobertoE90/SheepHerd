@@ -12,8 +12,10 @@ public class SheepDotsManager : MonoBehaviour
 {
     [Header("Herd Config")]
     [SerializeField] private int _sheepCount;
-    [SerializeField] private float _spawnSquareSide;
     [SerializeField] private int _updateGroupCount = 100;
+    [Space(20)]
+    [SerializeField] private float _spawnSquareSide;
+    [SerializeField] private float _globalBakeTexturesPPU = 2f;
     [SerializeField] private float _worldScale;
     public float WorldScale => _worldScale;
 
@@ -38,13 +40,13 @@ public class SheepDotsManager : MonoBehaviour
         SpawnHerd();
         
         foreach(var baker in _cameraBakers)
-            baker.Initialize(_sheepCount, Vector2.one * _spawnSquareSide, _worldScale, transform.position, transform.rotation);
+            baker.Initialize(_sheepCount, Vector2.one * _spawnSquareSide, _globalBakeTexturesPPU, _worldScale, transform.position, transform.rotation);
        
         var entitiesInputManager = InputEntityManager.Instance;
         if (entitiesInputManager != null)
         {
             entitiesInputManager.SetInputReferenceMatrix(transform.localToWorldMatrix);
-            entitiesInputManager.Initialize(Vector2.one * _spawnSquareSide, _worldScale);
+            entitiesInputManager.Initialize(Vector2.one * _spawnSquareSide, _worldScale, _globalBakeTexturesPPU);
         }
     }
 

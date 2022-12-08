@@ -22,7 +22,7 @@ public class MemoryShaderPostController : MonoBehaviour
         _camera = GetComponent<Camera>();
         _decayPropertyId = Shader.PropertyToID("_Decay");
         _tracedecayPropertyId = Shader.PropertyToID("_TraceDecay");
-        _baker.InitializedAction += OnBakerInitialized;
+        _baker.BakerInitializedAction += OnBakerInitialized;
         if (_baker.IsInitialized)
             OnBakerInitialized();
     }
@@ -66,7 +66,7 @@ public class MemoryShaderPostController : MonoBehaviour
 
     private void OnDestroy()
     {
-        _baker.InitializedAction -= OnBakerInitialized;
+        _baker.BakerInitializedAction -= OnBakerInitialized;
     }
 
 }
