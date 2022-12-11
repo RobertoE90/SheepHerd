@@ -25,7 +25,8 @@ public class SheepDotsManager : MonoBehaviour
 
 
     [Header("External references")]
-    [SerializeField] private BaseEntityCameraBaker[] _cameraBakers;
+    [SerializeField] private BaseCameraBaker[] _cameraBakers;
+    [SerializeField] private BaseEntityCameraBaker[] _cameraEntityBakers;
 
     private NativeArray<Entity> _sheepEntities;
     private EntityManager _entityManager;
@@ -38,8 +39,11 @@ public class SheepDotsManager : MonoBehaviour
         _entityManager = World.DefaultGameObjectInjectionWorld.EntityManager;
         SpawnGlobalParamsEntity();
         SpawnHerd();
-        
-        foreach(var baker in _cameraBakers)
+
+        foreach (var baker in _cameraBakers)
+            baker.Initialize(Vector2.one * _spawnSquareSide, _globalBakeTexturesPPU, _worldScale, transform.position, transform.rotation);
+
+        foreach (var baker in _cameraEntityBakers)
             baker.Initialize(_sheepCount, Vector2.one * _spawnSquareSide, _globalBakeTexturesPPU, _worldScale, transform.position, transform.rotation);
        
         var entitiesInputManager = InputEntityManager.Instance;

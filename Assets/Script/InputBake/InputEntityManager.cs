@@ -240,11 +240,11 @@ public class InputEntityManager : MonoBehaviour
 
         Gizmos.color = Color.blue;
         foreach(var target in _attractTargets)
-            Gizmos.DrawWireSphere(target.position, 10f * _worldScale);
+            Gizmos.DrawWireSphere(target.position, 5f * _worldScale);
 
         Gizmos.color = Color.red;
         foreach (var target in _repulseTargets)
-            Gizmos.DrawWireSphere(target.position, 20f * _worldScale);
+            Gizmos.DrawWireSphere(target.position, 7.5f * _worldScale);
     }
 
     private float2 WorldToTextureUv(Vector3 worldPos)

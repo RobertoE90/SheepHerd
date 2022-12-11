@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class CameraUtil : MonoBehaviour
 {
-    [SerializeField][Range(100f, 400f)] private float _heighValue;
+    [SerializeField][Range(10f, 100f)] private float _heighValue;
     [SerializeField] private float _targerLerpSpeed;
     [Header("References")]
     [SerializeField] private Transform _target;

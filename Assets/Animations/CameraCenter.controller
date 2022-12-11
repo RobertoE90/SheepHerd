@@ -52,7 +52,7 @@ AnimatorState:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: CameraPan
-  m_Speed: 0.0003
+  m_Speed: 0.003
   m_CycleOffset: 0
   m_Transitions: []
   m_StateMachineBehaviours: []
