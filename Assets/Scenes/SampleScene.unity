@@ -177,7 +177,6 @@ Transform:
   m_Children:
   - {fileID: 1621657543}
   - {fileID: 532375547}
-  - {fileID: 805101902}
   - {fileID: 515257792}
   m_Father: {fileID: 0}
   m_RootOrder: 2
@@ -414,8 +413,9 @@ Transform:
   - {fileID: 1824915604}
   - {fileID: 250510251}
   - {fileID: 1575742674}
+  - {fileID: 805101902}
   m_Father: {fileID: 15527302}
-  m_RootOrder: 3
+  m_RootOrder: 2
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &515257793
 MonoBehaviour:
@@ -437,6 +437,7 @@ MonoBehaviour:
   _cameraDepth: 1.25
   _bakeTextureFormat: 16
   _heightGeneratorComputeShader: {fileID: 7200000, guid: 360edb989e9bcbb4a9aaa3226c902e1f, type: 3}
+  _meshMaterial: {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
   _volumeColor: {r: 0.066278934, g: 0, b: 1, a: 1}
 --- !u!1 &532375545
 GameObject:
@@ -519,7 +520,7 @@ Transform:
   m_GameObject: {fileID: 615007617}
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.002, y: 0.01, z: 0.002}
+  m_LocalScale: {x: 0.005, y: 0.01, z: 0.005}
   m_Children:
   - {fileID: 186520611}
   - {fileID: 340073945}
@@ -819,8 +820,8 @@ Transform:
   - {fileID: 1237255921}
   - {fileID: 615007618}
   - {fileID: 1449835948}
-  m_Father: {fileID: 15527302}
-  m_RootOrder: 2
+  m_Father: {fileID: 515257792}
+  m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &843176131
 GameObject:

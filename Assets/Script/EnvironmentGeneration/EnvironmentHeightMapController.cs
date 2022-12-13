@@ -1,5 +1,8 @@
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
+using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -8,7 +11,10 @@ using Debug = UnityEngine.Debug;
 public class EnvironmentHeightMapController : BaseCameraBaker
 {
     [SerializeField] private ComputeShader _heightGeneratorComputeShader;
+    [SerializeField] private Material _meshMaterial;
     [SerializeField] private Color _volumeColor;
+
+    private Dictionary<string, int> _computeShaderKernels;
 
     private RenderTexture _cameraRenderTexture;
     private Vector3 _originPosition;
@@ -16,9 +22,8 @@ public class EnvironmentHeightMapController : BaseCameraBaker
     private Vector2 _horizontalArea;
 
     private bool _renderingFlag = false;
-    private Stopwatch _renderTimer;
 
-    private MarchingCubesTool _meshingTool;
+    private Thread _processThread;
 
     private void Awake()
     {
@@ -28,6 +33,9 @@ public class EnvironmentHeightMapController : BaseCameraBaker
     public override void Initialize(Vector2 bakeArea, float texturePPU, float worldScale, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
     {
         base.Initialize(bakeArea, texturePPU, worldScale, centerWorldPosition, centerWorldRotation);
+
+        InitializeKernelDictionary();
+
         _originPosition = centerWorldPosition;
         _originRotation = centerWorldRotation;
         _horizontalArea = worldScale * bakeArea;
@@ -41,67 +49,80 @@ public class EnvironmentHeightMapController : BaseCameraBaker
         _cameraRenderTexture.Create();
         _bakeCamera.targetTexture = _cameraRenderTexture;
 
+        var material = _bakeDebugMeshRenderer.material;
+        material.SetTexture("_BaseMap", _bakeTexture);
 
-        RenderPipelineManager.endCameraRendering += OnCameraRenderEnded;
-        _renderTimer = Stopwatch.StartNew();
-        _meshingTool = new MarchingCubesTool(new float3(1f, 2.5f, 1.25f), new int3(5, 7, 5));
-        
-        CameraRender();
+        _processThread = new Thread(RenderDepthMap);
+        _processThread.Start();
+
+        //CameraRender();
     }
-
-    private void OnCameraRenderEnded(ScriptableRenderContext context, Camera camera)
+    
+    private void InitializeKernelDictionary()
     {
-        if (camera != _bakeCamera)
-            return;
-
-        _renderingFlag = false;
-        _renderTimer.Stop();
-        Debug.Log($"done rendering {_renderTimer.ElapsedTicks}");
-    }
-
-    private async void CameraRender()
-    {
-        await _meshingTool.ComputeMesh();
-        return;
-        var step = _cameraDepth / 255.0f;
-        for (var j = 0; j < 500; j++)
+        _computeShaderKernels = new Dictionary<string, int>();
+        var kernelNames = new string[]
         {
-            ClearBake(_bakeTexture);
+            "ClearBakeCS",
+            "GetIslandCS",
+            "BakeHeightCS"
+        };
+
+        foreach(var kName in kernelNames)
+            _computeShaderKernels.Add(kName, _heightGeneratorComputeShader.FindKernel(kName));
+        
+    }
+
+    private void RenderDepthMap()
+    {
+        var step = _cameraDepth / 255.0f;
+
+
+        ClearBake(_bakeTexture);
+
+        for (var sliceInt = 254; sliceInt >= 0; sliceInt--)
+        {
+
             if (!Application.isPlaying)
                 return;
-            /*
-            var material = _bakeDebugMeshRenderer.material;
-            material.SetTexture("_BaseMap", _bakeTexture);
-            for (var sliceInt = 254; sliceInt >= 0; sliceInt--)
-            {
-                
 
+            _renderingFlag = true;
+            _bakeCamera.nearClipPlane = sliceInt * step;
+            _bakeCamera.farClipPlane = (sliceInt + 1) * step;
+            _bakeCamera.Render();
                 
-                if (!_renderingFlag)
-                {
-                    _renderTimer.Reset();
-                    _renderingFlag = true;
-                    _bakeCamera.nearClipPlane = sliceInt * step;
-                    _bakeCamera.farClipPlane = (sliceInt + 1) * step;
-                    _bakeCamera.Render();
-                }
-                await Task.Yield();
-                await Task.Yield();
-                
-                BakeHeightMap(1f - sliceInt / 255f);
-            }
-            */
-            
-            /*
-            await Task.Delay(5000);
-            material.SetTexture("_BaseMap", _cameraRenderTexture);
-            for (var i = 0f; i < 1; i+= 0.25f)
-            {
-                GetIsland(_bakeTexture, _cameraRenderTexture, new float2(i, i + 0.25f));
-                await Task.Delay(3000);
-            }
-            */
+            BakeHeightMap(1f - sliceInt / 255f);
         }
+
+        /*
+        for (var i = 0f; i < 1; i+= 0.25f)
+        {
+            GetIsland(_bakeTexture, _cameraRenderTexture, new float2(i, i + 0.25f));
+            Mesh(_cameraRenderTexture);
+        }
+        */
+    }
+
+    private void Mesh(RenderTexture renderTexture)
+    {
+        var meshingTool = new MarchingCubesTool(
+            Vector2.zero,
+            new float3(_horizontalArea.x, _cameraDepth, _horizontalArea.y),
+            new int3(30, 40, 30),
+            transform,
+            _meshMaterial);
+
+        var texture = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.R8, false);
+        var prevActive = RenderTexture.active;
+        RenderTexture.active = renderTexture;
+        texture.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
+        texture.Apply();
+        RenderTexture.active = prevActive;
+
+        var material = _bakeDebugMeshRenderer.material;
+        material.SetTexture("_BaseMap", texture);
+        meshingTool.FillWithTexture(texture);
+        meshingTool.ComputeMesh();
     }
 
     private void BakeHeightMap(float normalizedHeight)
@@ -111,7 +132,8 @@ public class EnvironmentHeightMapController : BaseCameraBaker
             Debug.LogError("Input and output texture size dont match");
             return;
         }
-        var bakeKernel = _heightGeneratorComputeShader.FindKernel("BakeHeightCS");
+
+        var bakeKernel = _computeShaderKernels["BakeHeightCS"];
         
         if (!ComputeShaderUtilities.CheckComputeShaderTextureSize(
             _heightGeneratorComputeShader,
@@ -145,8 +167,9 @@ public class EnvironmentHeightMapController : BaseCameraBaker
 
     private void ClearBake(RenderTexture targetTexture)
     {
-        var bakeKernel = _heightGeneratorComputeShader.FindKernel("ClearBakeCS");
+        var bakeKernel = _computeShaderKernels["ClearBakeCS"];
 
+        /*
         if (!ComputeShaderUtilities.CheckComputeShaderTextureSize(
             _heightGeneratorComputeShader,
             bakeKernel,
@@ -155,7 +178,10 @@ public class EnvironmentHeightMapController : BaseCameraBaker
         {
             return;
         }
-        
+        */
+
+
+        _heightGeneratorComputeShader.SetFloat("NormalizedBakeHeight", 0.1f);
         _heightGeneratorComputeShader.SetTexture(bakeKernel, "ResultTexture", targetTexture);
 
         _heightGeneratorComputeShader.Dispatch(
@@ -167,7 +193,7 @@ public class EnvironmentHeightMapController : BaseCameraBaker
 
     private void GetIsland(RenderTexture inputTexture, RenderTexture targetTexture, float2 islandHeightRange)
     {
-        var kernel = _heightGeneratorComputeShader.FindKernel("GetIslandCS");
+        var kernel = _computeShaderKernels["GetIslandCS"];
 
         if (!ComputeShaderUtilities.CheckComputeShaderTextureSize(
             _heightGeneratorComputeShader,
@@ -216,7 +242,6 @@ public class EnvironmentHeightMapController : BaseCameraBaker
         Gizmos.matrix = Matrix4x4.TRS(_originPosition, _originRotation, Vector3.one);
         Gizmos.DrawWireCube(Vector3.up * 0.5f * _cameraDepth, new Vector3(_horizontalArea.x, _cameraDepth, _horizontalArea.y));
 
-        _meshingTool.DrawGizmo(Vector3.forward * -3);
+        //_meshingTool.DrawGizmo(Vector3.right * _horizontalArea.x + Vector3.up * _cameraDepth * 0.5f);
     }
 }
-

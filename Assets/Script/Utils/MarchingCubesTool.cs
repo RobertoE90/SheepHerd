@@ -9,7 +9,8 @@ public class MarchingCubesTool
     private int3 _axisResolution;
     private float3 _volumeDimensions;
     private VolumePoint[,,] _volumePoints; //contains an array with 3d index access to the points that are in the volume
-    private List<float3> _meshPoints;
+    private List<Vector3> _meshPoints;
+    private Mesh _generatedMesh;
 
     #region CheetTables
     private int3[] _cubeLooperCheet =
@@ -302,30 +303,47 @@ public class MarchingCubesTool
     };
     #endregion
     
-    public MarchingCubesTool(float3 volumeDimensions, int3 axisResolution)
+    public MarchingCubesTool(Vector2 center, Vector3 volumeDimensions, int3 axisResolution, Transform meshParent, Material meshMaterial)
     {
         _axisResolution = axisResolution;
         _volumeDimensions = volumeDimensions;
         _volumePoints = new VolumePoint[axisResolution.x, axisResolution.y, axisResolution.z];
-        _meshPoints = new List<float3>();
-        FillRandomVolume();
+        _meshPoints = new List<Vector3>();
+        _generatedMesh = new Mesh();
+
+        var meshGo = new GameObject("Martching Cubes Mesh");
+        meshGo.transform.SetParent(meshParent);
+        
+        meshGo.transform.localPosition = Vector3.right * center.x + Vector3.forward * center.y + Vector3.up * 0.5f * volumeDimensions.y;
+        meshGo.transform.localPosition += Vector3.right * 2f;
+
+        meshGo.AddComponent<MeshFilter>().mesh = _generatedMesh;
+        meshGo.AddComponent<MeshRenderer>().material = meshMaterial;
     }
 
-    private void FillRandomVolume()
-    {
+    public void FillWithTexture(Texture2D fillTexture) {
+        Color[] colorData = fillTexture.GetPixels();
+
         var xSpace = _volumeDimensions.x / (_axisResolution.x - 1);
         var ySpace = _volumeDimensions.y / (_axisResolution.y - 1);
         var zSpace = _volumeDimensions.z / (_axisResolution.z - 1);
 
+        var widthAspect = (float)fillTexture.width / _axisResolution.x;
+        var heightAspect = (float)fillTexture.height / _axisResolution.z;
         for (var y = 0; y < _axisResolution.y; y++)
         {
             for (var z = 0; z < _axisResolution.z; z++)
             {
                 for (var x = 0; x < _axisResolution.x; x++)
                 {
+                    var readUv = new int2((int)(widthAspect * x), (int)(heightAspect * z));
+                    var colorAtUv = colorData[readUv.x + readUv.y * fillTexture.width];
+        
+                    var insideVolume = colorAtUv.r > ((float)y / _axisResolution.y);
+
                     _volumePoints[x, y, z] = new VolumePoint
                     {
-                        InsideVolume = (UnityEngine.Random.value) > 0.5f,
+                        InsideVolume = insideVolume,
                         PointLocalPosition = new float3(
                             x * xSpace - _volumeDimensions.x * 0.5f,
                             y * ySpace - _volumeDimensions.y * 0.5f,
@@ -336,7 +354,7 @@ public class MarchingCubesTool
         }
     }
 
-    public async Task ComputeMesh()
+    public void ComputeMesh()
     {
         for (var y = 0; y < _axisResolution.y - 1; y++)
         {
@@ -346,10 +364,20 @@ public class MarchingCubesTool
                 {
                     var index = MarchCube(new int3(x, y, z));
                     GenerateCubeMesh(new int3(x, y, z), index);
-                    await Task.Delay(100);
                 }
             }
         }
+
+        _generatedMesh.Clear();
+        _generatedMesh.SetVertices(_meshPoints);
+        var triangles = new int[_meshPoints.Count];
+        for(var i = 0; i < _meshPoints.Count; i++)
+        {
+            triangles[i] = i;
+        }
+        _generatedMesh.triangles = triangles;
+
+        Debug.Log("done messhing");
     }
 
     private int MarchCube(int3 cubeIndex)
@@ -391,6 +419,7 @@ public class MarchingCubesTool
 
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireCube(Vector3.zero, _volumeDimensions);
+        /*
         for (var y = 0; y < _axisResolution.y; y++)
         {
             for (var z = 0; z < _axisResolution.z; z++)
@@ -403,7 +432,7 @@ public class MarchingCubesTool
                 }
             }
         }
-
+        */
         var pointTriLenght = Mathf.FloorToInt(_meshPoints.Count / 3f) * 3;
         for(var i = 0; i < pointTriLenght; i+= 3)
         {
