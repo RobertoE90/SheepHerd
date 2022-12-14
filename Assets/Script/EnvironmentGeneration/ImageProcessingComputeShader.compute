@@ -1,0 +1,51 @@
+#pragma kernel BakeHeightCS
+#pragma kernel ClearBakeCS
+#pragma kernel SobelEdgeDetectionCS
+
+RWTexture2D<float4> InputTexture;
+RWTexture2D<float4> ResultTexture;
+
+float NormalizedBakeHeight;
+[numthreads(4,4,1)]
+void BakeHeightCS (uint3 id : SV_DispatchThreadID)
+{
+    float currentValue = ResultTexture[id.xy].x;
+    if (currentValue < 0.01) {
+        
+        float resultColor = clamp(0, 1, InputTexture[id.xy].x * 500) * NormalizedBakeHeight;
+        ResultTexture[id.xy] = float4(resultColor, resultColor, resultColor, 1);
+    }
+}
+
+[numthreads(4, 4, 1)]
+void ClearBakeCS(uint3 id : SV_DispatchThreadID)
+{
+    ResultTexture[id.xy] = float4(0, 0, 0, 1);
+}
+
+
+int VerticalKernel[9] = {
+    -1, 0, 1,
+    -2, 0, 2,
+    -1, 0, 1 };
+
+int HorizontalKernel[9] = {
+    -1, -2, -1,
+    0, 0, 0,
+    1, 2, 1 };
+
+[numthreads(4, 4, 1)]
+void SobelEdgeDetectionCS(uint3 id : SV_DispatchThreadID)
+{
+    float vKernel = 0.1;
+
+    float hKernel = 0;
+    for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+            int kernelIndex = (x + 1) + (y + 1) * 3;
+            vKernel += InputTexture[id.xy + int2(x, y)] * VerticalKernel[kernelIndex];
+            hKernel += InputTexture[id.xy + int2(x, y)] * HorizontalKernel[kernelIndex];
+        }
+    }
+    ResultTexture[id.xy] = float4(vKernel, hKernel, 0, 1);
+}
