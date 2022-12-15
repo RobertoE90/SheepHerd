@@ -1,6 +1,6 @@
 #pragma kernel BakeHeightCS
 #pragma kernel ClearBakeCS
-#pragma kernel SobelEdgeDetectionCS
+#pragma kernel ContourDetectionCS
 
 RWTexture2D<float4> InputTexture;
 RWTexture2D<float4> ResultTexture;
@@ -24,28 +24,26 @@ void ClearBakeCS(uint3 id : SV_DispatchThreadID)
 }
 
 
-int VerticalKernel[9] = {
-    -1, 0, 1,
-    -2, 0, 2,
-    -1, 0, 1 };
-
-int HorizontalKernel[9] = {
-    -1, -2, -1,
-    0, 0, 0,
-    1, 2, 1 };
-
 [numthreads(4, 4, 1)]
-void SobelEdgeDetectionCS(uint3 id : SV_DispatchThreadID)
+void ContourDetectionCS(uint3 id : SV_DispatchThreadID)
 {
-    float vKernel = 0.1;
+    float sum = 0.0;
+    float inputValue = 0.0;
+    float current = InputTexture[id.xy].x * 1000;
+    current = clamp(current, 0, 1);
 
-    float hKernel = 0;
     for (int y = -1; y <= 1; y++) {
         for (int x = -1; x <= 1; x++) {
-            int kernelIndex = (x + 1) + (y + 1) * 3;
-            vKernel += InputTexture[id.xy + int2(x, y)] * VerticalKernel[kernelIndex];
-            hKernel += InputTexture[id.xy + int2(x, y)] * HorizontalKernel[kernelIndex];
+            if (x == 0 && y == 0) {
+                continue;
+            }
+
+            inputValue = InputTexture[id.xy + int2(x, y)].x * 1000;
+            inputValue = clamp(inputValue, 0, 1);
+            sum += abs(current - inputValue);
         }
     }
-    ResultTexture[id.xy] = float4(vKernel, hKernel, 0, 1);
+
+
+    ResultTexture[id.xy] = float4(sum, sum, sum, 1);
 }

@@ -1,7 +1,9 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
+using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
@@ -17,6 +19,32 @@ public class EnvironmentHeightMapController : BaseCameraBaker
     private Vector3 _originPosition;
     private Quaternion _originRotation;
     private Vector2 _horizontalArea;
+
+    private Vector2[] _marchingSquaresSearchSheet = new Vector2[]{
+        Vector2.zero,
+        new Vector2(1, 0),
+        new Vector2(1, 1),
+        new Vector2(0, 1)
+    };
+
+    private List<int[]> _marchingSquaresMeshSheet = new List<int[]>{
+        new int[]{ },
+        new int[]{ 0, 1, 0, 3},
+        new int[]{ 0, 1, 1, 2},
+        new int[]{ 0, 3, 1, 2},
+        new int[]{ 1, 2, 2, 3},
+        new int[]{}, //dont add on this case
+        new int[]{ 1, 0, 2, 3},
+        new int[]{ 2, 3, 0, 3},
+        new int[]{ 2, 3, 0, 3},
+        new int[]{ 0, 1, 2, 3},
+        new int[]{}, //dont add on this case 
+        new int[]{ 1, 2, 2, 3},
+        new int[]{ 0, 3, 1, 2},
+        new int[]{ 0, 1, 1, 2},
+        new int[]{ 0, 1, 0, 3},
+        new int[]{},
+    };
 
     private void Awake()
     {
@@ -38,14 +66,7 @@ public class EnvironmentHeightMapController : BaseCameraBaker
         await RenderDepthMap(_bakeTexture);
         await Task.Delay(2000);
 
-
-        var edgeTexture = CloneRenderTexureWithProperties(_bakeTexture, true, RenderTextureFormat.Default);
-        await ComputeEdges(_bakeTexture, edgeTexture);
-
-        var material = _bakeDebugMeshRenderer.material;
-        material.SetTexture("_BaseMap", edgeTexture);
-
-        Debug.Log("wasdasd");
+        ComputeContourProcess(_bakeTexture, _horizontalArea, 15);
 
     }
 
@@ -62,6 +83,7 @@ public class EnvironmentHeightMapController : BaseCameraBaker
     {
         RenderTexture clone;
         clone = new RenderTexture(rt.width, rt.height, 0, cloneFormat);
+        clone.filterMode = rt.filterMode;
         clone.enableRandomWrite = enableRandomWrite;
         clone.Create();
         return clone;
@@ -155,7 +177,101 @@ public class EnvironmentHeightMapController : BaseCameraBaker
             1);
     }
 
-    private async Task ComputeEdges(RenderTexture inputTexture, RenderTexture targetTexture)
+    private void ComputeContourProcess(RenderTexture cluterTexture, Vector2 worldSpaceArea, int resolution = 50)
+    {
+        AsyncGPUReadback.Request(
+            cluterTexture,
+            0,
+            (req) =>
+            {
+                if(resolution < 0 || resolution >= cluterTexture.width || resolution >= cluterTexture.height)
+                {
+                    Debug.LogError($"Invalid resolution {resolution} for size {cluterTexture.width}: {cluterTexture.height}");
+                    return;
+                }
+
+                var textureData = req.GetData<byte>();
+
+                var imageSize = new Vector2Int(cluterTexture.width, cluterTexture.height);
+                var steps = new Vector2Int(
+                    (int)(imageSize.x / resolution), (int)(imageSize.y / resolution));
+
+                for(var y = 0; y < resolution; y++)
+                {
+                    for(var x = 0; x < resolution; x++)
+                    {
+                        int mask = 0;
+                        var originPos = new Vector2(x, y);
+                        
+                        for (var i = 0; i < _marchingSquaresSearchSheet.Length; i++)
+                        {
+                            
+                            var searchPos = originPos + _marchingSquaresSearchSheet[i];
+                            byte sample = 0;
+                            if (
+                            searchPos.x != 0 && searchPos.x != resolution - 1 && 
+                            searchPos.y != 0 && searchPos.y != resolution - 1)
+                            {
+                                sample = SampleImageData(
+                                    textureData,
+                                    imageSize,
+                                    Vector2.Scale(searchPos, steps),
+                                    1);
+                            }
+
+                            if (sample != 0)
+                                mask = mask | 1 << i;
+
+                            var test = sample != 0;
+
+                        }
+
+                        try
+                        {
+                            var meshSheetList = _marchingSquaresMeshSheet[mask];
+                            var points = new List<Vector3>();
+                            for(var i = 0; i < meshSheetList.Length; i += 2)
+                            {
+                                var pA = originPos + _marchingSquaresSearchSheet[meshSheetList[i]];
+                                var pB = originPos + _marchingSquaresSearchSheet[meshSheetList[i + 1]];
+
+                                points.Add(new Vector3(pA.x + pB.x, 0, pA.y + pB.y) * 0.5f);
+                            }
+
+                            for(var i = 0; i < points.Count - 1; i++)
+                                Debug.DrawLine(points[i] + Vector3.right * 2, points[i + 1] + Vector3.right * 2, Color.white);
+                            
+                        }
+                        catch(Exception e) { }
+
+                        
+                    }
+                }
+                Debug.Break();
+            });
+    }
+
+    private byte SampleImageData(NativeArray<byte> data, Vector2Int imageSize, Vector2 samplePoint, int imageChannels = 4, int channel = 0)
+    {
+        if(samplePoint.x < 0 || samplePoint.x >= imageSize.x ||
+            samplePoint.y < 0 || samplePoint.y >= imageSize.y)
+        {
+            Debug.LogError("Sampling outside the image");
+            return 0;
+        }
+
+        var index = ((int)samplePoint.x + (int)samplePoint.y * (int)imageSize.x) * imageChannels + channel;
+        
+        if(index >= data.Length)
+        {
+            Debug.LogError($"Sampling outside the image with index {index} : {data.Length}");
+            return byte.MaxValue;
+        }
+
+        return data[index];
+    }
+
+    private async Task ComputeContour(RenderTexture inputTexture, RenderTexture targetTexture)
     {
         if(inputTexture.width != targetTexture.width || inputTexture.height != targetTexture.height)
         {
@@ -163,7 +279,7 @@ public class EnvironmentHeightMapController : BaseCameraBaker
             return;
         }
 
-        var kernel = _imageProcessingComputeShader.FindKernel("SobelEdgeDetectionCS");
+        var kernel = _imageProcessingComputeShader.FindKernel("ContourDetectionCS");
 
         if (!ComputeShaderUtilities.CheckComputeShaderTextureSize(
             _imageProcessingComputeShader,

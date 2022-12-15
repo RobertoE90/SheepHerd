@@ -177,6 +177,7 @@ Transform:
   m_Children:
   - {fileID: 1621657543}
   - {fileID: 532375547}
+  - {fileID: 805101902}
   - {fileID: 515257792}
   m_Father: {fileID: 0}
   m_RootOrder: 2
@@ -413,9 +414,8 @@ Transform:
   - {fileID: 1824915604}
   - {fileID: 250510251}
   - {fileID: 1575742674}
-  - {fileID: 805101902}
   m_Father: {fileID: 15527302}
-  m_RootOrder: 2
+  m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &515257793
 MonoBehaviour:
@@ -435,6 +435,7 @@ MonoBehaviour:
   _bakeLayerName: 3dScan
   writeToBakedTexture: 1
   _cameraDepth: 1.25
+  _textureFilterMode: 0
   _bakeTextureFormat: 16
   _imageProcessingComputeShader: {fileID: 7200000, guid: 360edb989e9bcbb4a9aaa3226c902e1f, type: 3}
   _meshMaterial: {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
@@ -474,6 +475,7 @@ MonoBehaviour:
   _bakeLayerName: HeatMapLayer
   writeToBakedTexture: 1
   _cameraDepth: 10
+  _textureFilterMode: 0
   _bakeTextureFormat: 0
   _bakeMesh: {fileID: -2432090755550338912, guid: 324c5791d092ed44e88b665c61913c5c, type: 3}
   _bakeMaterial: {fileID: 2100000, guid: 1dcf48d20c418e94b8d9a7d944fbfcdb, type: 2}
@@ -820,8 +822,8 @@ Transform:
   - {fileID: 1237255921}
   - {fileID: 615007618}
   - {fileID: 1449835948}
-  m_Father: {fileID: 515257792}
-  m_RootOrder: 3
+  m_Father: {fileID: 15527302}
+  m_RootOrder: 2
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &843176131
 GameObject:
@@ -1315,6 +1317,101 @@ Transform:
   m_Father: {fileID: 1449835948}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1293093549
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1293093553}
+  - component: {fileID: 1293093552}
+  - component: {fileID: 1293093551}
+  - component: {fileID: 1293093550}
+  m_Layer: 0
+  m_Name: Cube
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!65 &1293093550
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1293093549}
+  m_Material: {fileID: 0}
+  m_IsTrigger: 0
+  m_Enabled: 1
+  serializedVersion: 2
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0, z: 0}
+--- !u!23 &1293093551
+MeshRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1293093549}
+  m_Enabled: 1
+  m_CastShadows: 1
+  m_ReceiveShadows: 1
+  m_DynamicOccludee: 1
+  m_MotionVectors: 1
+  m_LightProbeUsage: 1
+  m_ReflectionProbeUsage: 1
+  m_RayTracingMode: 2
+  m_RayTraceProcedural: 0
+  m_RenderingLayerMask: 1
+  m_RendererPriority: 0
+  m_Materials:
+  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  m_StaticBatchInfo:
+    firstSubMesh: 0
+    subMeshCount: 0
+  m_StaticBatchRoot: {fileID: 0}
+  m_ProbeAnchor: {fileID: 0}
+  m_LightProbeVolumeOverride: {fileID: 0}
+  m_ScaleInLightmap: 1
+  m_ReceiveGI: 1
+  m_PreserveUVs: 0
+  m_IgnoreNormalsForChartDetection: 0
+  m_ImportantGI: 0
+  m_StitchLightmapSeams: 1
+  m_SelectedEditorRenderState: 3
+  m_MinimumChartSize: 4
+  m_AutoUVMaxDistance: 0.5
+  m_AutoUVMaxAngle: 89
+  m_LightmapParameters: {fileID: 0}
+  m_SortingLayerID: 0
+  m_SortingLayer: 0
+  m_SortingOrder: 0
+  m_AdditionalVertexStreams: {fileID: 0}
+--- !u!33 &1293093552
+MeshFilter:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1293093549}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!4 &1293093553
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1293093549}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 4.5, y: 0, z: 7.5}
+  m_LocalScale: {x: 0.5, y: 1, z: 0.5}
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_RootOrder: 4
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1364512664
 GameObject:
   m_ObjectHideFlags: 0
@@ -1659,6 +1756,7 @@ MonoBehaviour:
   _bakeLayerName: PositionIdLayer
   writeToBakedTexture: 0
   _cameraDepth: 10
+  _textureFilterMode: 0
   _bakeTextureFormat: 0
   _bakeMesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
   _bakeMaterial: {fileID: 2100000, guid: 2e2d9d6244893e740b64649fab1f627f, type: 2}

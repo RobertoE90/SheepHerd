@@ -15,6 +15,7 @@ public class BaseCameraBaker : MonoBehaviour
     [SerializeField] protected string _bakeLayerName;
     [SerializeField] private bool writeToBakedTexture;
     [SerializeField] protected float _cameraDepth = 10;
+    [SerializeField] private FilterMode _textureFilterMode;
     [SerializeField] private RenderTextureFormat _bakeTextureFormat;
     protected RenderTexture _bakeTexture;
     public RenderTexture BakeTexture => _bakeTexture;
@@ -31,6 +32,7 @@ public class BaseCameraBaker : MonoBehaviour
     {
         _textureSize = new Vector2Int((int)(bakeArea.x * texturePPU), (int)(bakeArea.y * texturePPU));
         _bakeTexture = new RenderTexture(_textureSize.x, _textureSize.y, 0, _bakeTextureFormat, 0);
+        _bakeTexture.filterMode = _textureFilterMode;
         _bakeTexture.enableRandomWrite = writeToBakedTexture;
         _bakeTexture.Create();
 
