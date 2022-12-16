@@ -28,7 +28,7 @@ public class EnvironmentHeightMapController : BaseCameraBaker
     };
 
     private List<int[]> _marchingSquaresMeshSheet = new List<int[]>{
-        new int[]{ },
+        new int[]{},
         new int[]{ 0, 1, 0, 3},
         new int[]{ 0, 1, 1, 2},
         new int[]{ 0, 3, 1, 2},
@@ -64,9 +64,8 @@ public class EnvironmentHeightMapController : BaseCameraBaker
     private async void ProcessImage()
     {
         await RenderDepthMap(_bakeTexture);
-        await Task.Delay(2000);
-
-        ComputeContourProcess(_bakeTexture, _horizontalArea, 15);
+        //await Task.Delay(2000);
+        ComputeContourProcess(_bakeTexture, _horizontalArea);
 
     }
 
@@ -177,97 +176,91 @@ public class EnvironmentHeightMapController : BaseCameraBaker
             1);
     }
 
-    private void ComputeContourProcess(RenderTexture cluterTexture, Vector2 worldSpaceArea, int resolution = 50)
+    private void ComputeContourProcess(RenderTexture clusterTexture, Vector2 worldSpaceArea)
     {
+        var scaledRt = new RenderTexture(50, 50, 0, clusterTexture.format);
+        scaledRt.filterMode = FilterMode.Point;
+        Graphics.Blit(clusterTexture, scaledRt);
+   
+        var material = _bakeDebugMeshRenderer.material;
+        material.SetTexture("_BaseMap", scaledRt);
+
         AsyncGPUReadback.Request(
-            cluterTexture,
+            scaledRt,
             0,
             (req) =>
             {
-                if(resolution < 0 || resolution >= cluterTexture.width || resolution >= cluterTexture.height)
-                {
-                    Debug.LogError($"Invalid resolution {resolution} for size {cluterTexture.width}: {cluterTexture.height}");
-                    return;
-                }
 
                 var textureData = req.GetData<byte>();
+                var imageSize = new Vector2Int(scaledRt.width, scaledRt.height);
+                
+                var points = new List<Vector2>();
+                var edges = new List<int>();
 
-                var imageSize = new Vector2Int(cluterTexture.width, cluterTexture.height);
-                var steps = new Vector2Int(
-                    (int)(imageSize.x / resolution), (int)(imageSize.y / resolution));
-
-                for(var y = 0; y < resolution; y++)
+                for (var y = -1; y <= imageSize.y; y++)
                 {
-                    for(var x = 0; x < resolution; x++)
-                    {
-                        int mask = 0;
-                        var originPos = new Vector2(x, y);
-                        
-                        for (var i = 0; i < _marchingSquaresSearchSheet.Length; i++)
-                        {
-                            
-                            var searchPos = originPos + _marchingSquaresSearchSheet[i];
-                            byte sample = 0;
-                            if (
-                            searchPos.x != 0 && searchPos.x != resolution - 1 && 
-                            searchPos.y != 0 && searchPos.y != resolution - 1)
-                            {
-                                sample = SampleImageData(
-                                    textureData,
-                                    imageSize,
-                                    Vector2.Scale(searchPos, steps),
-                                    1);
-                            }
+                    for (var x = -1; x <= imageSize.x; x++) {
 
-                            if (sample != 0)
-                                mask = mask | 1 << i;
-
-                            var test = sample != 0;
-
-                        }
-
-                        try
-                        {
-                            var meshSheetList = _marchingSquaresMeshSheet[mask];
-                            var points = new List<Vector3>();
-                            for(var i = 0; i < meshSheetList.Length; i += 2)
-                            {
-                                var pA = originPos + _marchingSquaresSearchSheet[meshSheetList[i]];
-                                var pB = originPos + _marchingSquaresSearchSheet[meshSheetList[i + 1]];
-
-                                points.Add(new Vector3(pA.x + pB.x, 0, pA.y + pB.y) * 0.5f);
-                            }
-
-                            for(var i = 0; i < points.Count - 1; i++)
-                                Debug.DrawLine(points[i] + Vector3.right * 2, points[i + 1] + Vector3.right * 2, Color.white);
-                            
-                        }
-                        catch(Exception e) { }
-
-                        
+                        var searchPos = new Vector2Int(x, y);
+                        var meshSheetIndex = GetMaskFromSquare(textureData, imageSize, searchPos);
+                        UpdateShapePerimeter(meshSheetIndex, searchPos, ref points, ref edges);
                     }
                 }
+
+                for (var i = 0; i < edges.Count; i+=2)
+                {
+                    var a = new Vector3(points[edges[i]].x, 0, points[edges[i]].y);
+                    var b = new Vector3(points[edges[i + 1]].x, 0, points[edges[i + 1]].y);
+                    Debug.DrawLine(a + Vector3.right * 3, b + Vector3.right * 3, Color.white);
+                }
+
                 Debug.Break();
             });
+    }
+
+    private int GetMaskFromSquare(NativeArray<byte> data, Vector2Int imageSize, Vector2 squareZeroPos)
+    {
+        int mask = 0;
+        for (var i = 0; i < _marchingSquaresSearchSheet.Length; i++)
+        {
+            var searchPos = squareZeroPos + _marchingSquaresSearchSheet[i];
+            byte sample = SampleImageData(
+                    data,
+                    imageSize,
+                    searchPos,
+                    1);
+            
+            if (sample != 0)
+                mask = mask | 1 << i;
+        }
+
+        return mask;
+    }
+
+    private void UpdateShapePerimeter(int meshSheetIndex, Vector2Int currentSquarePosition, ref List<Vector2> points, ref List<int> edges)
+    {
+        var meshSheetList = _marchingSquaresMeshSheet[meshSheetIndex];
+        for (var i = 0; i < meshSheetList.Length; i += 2)
+        {
+            var pA = currentSquarePosition + _marchingSquaresSearchSheet[meshSheetList[i]];
+            var pB = currentSquarePosition + _marchingSquaresSearchSheet[meshSheetList[i + 1]];
+            //var pointKey = new Vector2Int((int)(pA.x + pB.x), (int)(pA.y + pB.y));
+            edges.Add(points.Count);
+            points.Add((pA + pB) * 0.5f);
+        }
     }
 
     private byte SampleImageData(NativeArray<byte> data, Vector2Int imageSize, Vector2 samplePoint, int imageChannels = 4, int channel = 0)
     {
         if(samplePoint.x < 0 || samplePoint.x >= imageSize.x ||
             samplePoint.y < 0 || samplePoint.y >= imageSize.y)
-        {
-            Debug.LogError("Sampling outside the image");
             return 0;
-        }
 
         var index = ((int)samplePoint.x + (int)samplePoint.y * (int)imageSize.x) * imageChannels + channel;
         
         if(index >= data.Length)
-        {
-            Debug.LogError($"Sampling outside the image with index {index} : {data.Length}");
-            return byte.MaxValue;
-        }
-
+            return 0;
+        
         return data[index];
     }
 

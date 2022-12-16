@@ -1,9 +1,9 @@
 #pragma kernel BakeHeightCS
 #pragma kernel ClearBakeCS
-#pragma kernel ContourDetectionCS
 
 RWTexture2D<float4> InputTexture;
 RWTexture2D<float4> ResultTexture;
+
 
 float NormalizedBakeHeight;
 [numthreads(4,4,1)]
@@ -21,29 +21,4 @@ void BakeHeightCS (uint3 id : SV_DispatchThreadID)
 void ClearBakeCS(uint3 id : SV_DispatchThreadID)
 {
     ResultTexture[id.xy] = float4(0, 0, 0, 1);
-}
-
-
-[numthreads(4, 4, 1)]
-void ContourDetectionCS(uint3 id : SV_DispatchThreadID)
-{
-    float sum = 0.0;
-    float inputValue = 0.0;
-    float current = InputTexture[id.xy].x * 1000;
-    current = clamp(current, 0, 1);
-
-    for (int y = -1; y <= 1; y++) {
-        for (int x = -1; x <= 1; x++) {
-            if (x == 0 && y == 0) {
-                continue;
-            }
-
-            inputValue = InputTexture[id.xy + int2(x, y)].x * 1000;
-            inputValue = clamp(inputValue, 0, 1);
-            sum += abs(current - inputValue);
-        }
-    }
-
-
-    ResultTexture[id.xy] = float4(sum, sum, sum, 1);
 }
