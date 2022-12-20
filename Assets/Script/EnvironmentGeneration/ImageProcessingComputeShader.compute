@@ -1,4 +1,5 @@
 #pragma kernel BakeHeightCS
+#pragma kernel ExpandMaskCS
 #pragma kernel ClearBakeCS
 
 RWTexture2D<float4> InputTexture;
@@ -14,6 +15,42 @@ void BakeHeightCS (uint3 id : SV_DispatchThreadID)
         
         float resultColor = clamp(0, 1, InputTexture[id.xy].x * 500) * NormalizedBakeHeight;
         ResultTexture[id.xy] = float4(resultColor, resultColor, resultColor, 1);
+    }
+}
+
+int MaskChannel;
+[numthreads(4, 4, 1)]
+void ExpandMaskCS(uint3 id : SV_DispatchThreadID)
+{
+    float pixelValue = ResultTexture[id.xy][MaskChannel];
+    if(pixelValue > 0.01)
+    {
+        return;
+    }
+
+    float max = 0.0;
+    float4 maxPixel;
+    int kernelCounter = 0;
+    for(int i = -1; i <= 1; i++)
+    {
+        for(int j = -1; j <= 1; j++)
+        {
+            float inspectValue = ResultTexture[id.xy + int2(i, j)][MaskChannel];
+            if(inspectValue > 0.01)
+            {
+                kernelCounter++;
+                if(inspectValue > max)
+                {
+                    max = inspectValue;
+                    maxPixel = ResultTexture[id.xy + int2(i, j)];
+                }
+            }
+        }        
+    }
+
+    if(kernelCounter != 9)
+    {
+        ResultTexture[id.xy] = maxPixel;
     }
 }
 

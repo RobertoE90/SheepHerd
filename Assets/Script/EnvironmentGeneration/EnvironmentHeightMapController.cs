@@ -1,14 +1,12 @@
-using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Threading;
 using System.Threading.Tasks;
-using Unity.Collections;
-using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Rendering;
 using Debug = UnityEngine.Debug;
+using Random = UnityEngine.Random;
+
 
 public class EnvironmentHeightMapController : BaseCameraBaker
 {
@@ -45,10 +43,18 @@ public class EnvironmentHeightMapController : BaseCameraBaker
         new int[]{ 0, 1, 0, 3},
         new int[]{},
     };
-
+    
     private void Awake()
     {
         _bakeCamera.enabled = false;
+        //Initialize(Vector2.one * 200, 2, 0.01f, Vector3.zero, quaternion.identity);
+    }
+
+    private void Update()
+    {
+        //if (_loop == null)
+          //  return;
+        
     }
 
     public override void Initialize(Vector2 bakeArea, float texturePPU, float worldScale, Vector3 centerWorldPosition, Quaternion centerWorldRotation)
@@ -65,7 +71,8 @@ public class EnvironmentHeightMapController : BaseCameraBaker
     {
         await RenderDepthMap(_bakeTexture);
         //await Task.Delay(2000);
-        ComputeContourProcess(_bakeTexture, _horizontalArea);
+        var scaledTexture = ResizeRenderTexture(_bakeTexture, new Vector2Int(52, 52));
+        ComputeContourProcess(scaledTexture, _horizontalArea);
 
     }
 
@@ -176,49 +183,184 @@ public class EnvironmentHeightMapController : BaseCameraBaker
             1);
     }
 
+    private RenderTexture ResizeRenderTexture(RenderTexture source, Vector2Int newSize, bool debugTexture = true, bool destroySource = true)
+    {
+        var scaledRt = new RenderTexture(40, 40, 0, source.format);
+        scaledRt.filterMode = FilterMode.Point;
+        scaledRt.enableRandomWrite = true;
+        Graphics.Blit(source, scaledRt);
+
+        if (destroySource)
+        {
+            source.Release();
+            Destroy(source);
+        }
+
+        if (debugTexture)
+        {
+            var material = _bakeDebugMeshRenderer.material;
+            material.SetTexture("_BaseMap", scaledRt);
+        }
+        
+        return scaledRt;
+    }
+
     private void ComputeContourProcess(RenderTexture clusterTexture, Vector2 worldSpaceArea)
     {
-        var scaledRt = new RenderTexture(50, 50, 0, clusterTexture.format);
-        scaledRt.filterMode = FilterMode.Point;
-        Graphics.Blit(clusterTexture, scaledRt);
-   
-        var material = _bakeDebugMeshRenderer.material;
-        material.SetTexture("_BaseMap", scaledRt);
+        var kernel = _imageProcessingComputeShader.FindKernel("ExpandMaskCS");
+
+        if (!ComputeShaderUtilities.CheckComputeShaderTextureSize(
+            _imageProcessingComputeShader,
+            kernel,
+            clusterTexture.width,
+            clusterTexture.height))
+        {
+            clusterTexture.Release();
+            Destroy(clusterTexture);
+            return;
+        }
+        
+        _imageProcessingComputeShader.SetTexture(kernel, "ResultTexture", clusterTexture);
+        _imageProcessingComputeShader.SetInt("MaskChannel", 0);
+
+        _imageProcessingComputeShader.Dispatch(
+            kernel, 
+            clusterTexture.width / 4, 
+            clusterTexture.height / 4, 
+            1);
 
         AsyncGPUReadback.Request(
-            scaledRt,
+            clusterTexture,
             0,
             (req) =>
             {
+                var textureData = req.GetData<byte>().ToArray();
+                var imageSize = new Vector2Int(clusterTexture.width, clusterTexture.height);
+                var imageCoordNormalizer = new Vector2(1f / imageSize.x, 1f / imageSize.y);
 
-                var textureData = req.GetData<byte>();
-                var imageSize = new Vector2Int(scaledRt.width, scaledRt.height);
-                
                 var points = new List<Vector2>();
-                var edges = new List<int>();
+                var pointsToIndexDic = new Dictionary<Vector2Int, int>();
+                var edgesDic = new Dictionary<int, int2>();
 
                 for (var y = -1; y <= imageSize.y; y++)
                 {
-                    for (var x = -1; x <= imageSize.x; x++) {
-
+                    for (var x = -1; x <= imageSize.x; x++)
+                    {
                         var searchPos = new Vector2Int(x, y);
-                        var meshSheetIndex = GetMaskFromSquare(textureData, imageSize, searchPos);
-                        UpdateShapePerimeter(meshSheetIndex, searchPos, ref points, ref edges);
+                        var meshSheetIndex = GetMaskFromSquare(textureData, searchPos, Vector2Int.zero, imageSize);
+                        
+                        var meshSheetList = _marchingSquaresMeshSheet[meshSheetIndex];
+                        var indexConnectionList = new List<int>();
+                        for (var i = 0; i < meshSheetList.Length; i += 2)
+                        {
+                            var pA = searchPos + _marchingSquaresSearchSheet[meshSheetList[i]];
+                            var pB = searchPos + _marchingSquaresSearchSheet[meshSheetList[i + 1]];
+            
+                            var pointKey = new Vector2Int((int) (pA.x + pB.x), (int) (pA.y + pB.y));
+                            if (!pointsToIndexDic.ContainsKey(pointKey))
+                            {
+                                pointsToIndexDic.Add(pointKey, points.Count);
+                                points.Add(Vector2.Scale((pA + pB) * 0.5f, imageCoordNormalizer)); //the point dimensions are normalized to the image size
+                            }
+
+                            indexConnectionList.Add(pointsToIndexDic[pointKey]);
+                        }
+
+                        for (var i = 0; i < indexConnectionList.Count; i += 2)
+                        {
+                            var edgePointA = indexConnectionList[i];
+                            var edgePointB = indexConnectionList[i + 1];
+            
+                            if (!edgesDic.ContainsKey(edgePointA))
+                            {
+                                edgesDic.Add(edgePointA, new int2(edgePointB, -1));
+                            }
+                            else
+                            {
+                                var edge = edgesDic[edgePointA];
+                                edge.y = edgePointB;
+                                edgesDic[edgePointA] = edge;
+                            }
+            
+                            if (!edgesDic.ContainsKey(edgePointB))
+                            {
+                                edgesDic.Add(edgePointB, new int2(edgePointA, -1));
+                            }
+                            else
+                            {
+                                var edge = edgesDic[edgePointB];
+                                edge.y = edgePointA;
+                                edgesDic[edgePointB] = edge;
+                            }
+                        }
                     }
                 }
 
-                for (var i = 0; i < edges.Count; i+=2)
+                var resultPoints = new List<Vector3>();
+                var addedHash = new HashSet<int>();
+                var currentPointIndex = 0;
+                
+                AddPointToResultList(points[currentPointIndex]);
+
+                while (resultPoints.Count != points.Count)
                 {
-                    var a = new Vector3(points[edges[i]].x, 0, points[edges[i]].y);
-                    var b = new Vector3(points[edges[i + 1]].x, 0, points[edges[i + 1]].y);
-                    Debug.DrawLine(a + Vector3.right * 3, b + Vector3.right * 3, Color.white);
+                    if (!addedHash.Contains(edgesDic[currentPointIndex].x))
+                        currentPointIndex = edgesDic[currentPointIndex].x;
+                    else if(!addedHash.Contains(edgesDic[currentPointIndex].y))
+                        currentPointIndex = edgesDic[currentPointIndex].y;
+                    else
+                    {
+                        Debug.LogError("Both point edges are added");
+                        break;
+                    }
+
+                    AddPointToResultList(points[currentPointIndex]);
+                }
+
+                void AddPointToResultList(Vector2 point)
+                {
+                    resultPoints.Add(new Vector3(point.x * worldSpaceArea.x, 0, point.y * worldSpaceArea.y));
+                    addedHash.Add(currentPointIndex);
+                }
+                
+                for (var i = 0; i < resultPoints.Count - 1; i++)
+                {
+                    Debug.DrawLine(resultPoints[i] * 5, resultPoints[(i + 1)] * 5, Color.green);
                 }
 
                 Debug.Break();
+                /*
+                _loop = loopPoints;
+                
+                StartCoroutine(TestLoop());
+                IEnumerator TestLoop()
+                {
+                    while (_loop.Count > 30)
+                    {
+                        int minCurvatureIndex = 0;
+                        float minCurvatureValue = float.MaxValue;
+                        for (var i = 0; i < _loop.Count; i++)
+                        {
+                            var curvature = _loop[i].ComputeCurvature();
+                            if (minCurvatureValue > curvature)
+                            {
+                                minCurvatureIndex = i;
+                                minCurvatureValue = curvature;
+                            }
+                        }
+                        
+                        //RemovePointFromLoop(minCurvatureIndex, ref _loop);
+                        
+                        yield return new WaitForSeconds(1);
+                    }
+                }
+                */
+
             });
+        
     }
 
-    private int GetMaskFromSquare(NativeArray<byte> data, Vector2Int imageSize, Vector2 squareZeroPos)
+    private int GetMaskFromSquare(byte[] data, Vector2 squareZeroPos, Vector2Int imageRectOrigin,  Vector2Int imageSize)
     {
         int mask = 0;
         for (var i = 0; i < _marchingSquaresSearchSheet.Length; i++)
@@ -236,21 +378,53 @@ public class EnvironmentHeightMapController : BaseCameraBaker
 
         return mask;
     }
-
-    private void UpdateShapePerimeter(int meshSheetIndex, Vector2Int currentSquarePosition, ref List<Vector2> points, ref List<int> edges)
+    private void UpdateShapePerimeter(int meshSheetIndex, Vector2Int currentSquarePosition, ref List<Vector2> points, ref Dictionary<int, int2> edgesDic, ref Dictionary<Vector2Int, int> pointsToIndexDic)
     {
-        var meshSheetList = _marchingSquaresMeshSheet[meshSheetIndex];
-        for (var i = 0; i < meshSheetList.Length; i += 2)
-        {
-            var pA = currentSquarePosition + _marchingSquaresSearchSheet[meshSheetList[i]];
-            var pB = currentSquarePosition + _marchingSquaresSearchSheet[meshSheetList[i + 1]];
-            //var pointKey = new Vector2Int((int)(pA.x + pB.x), (int)(pA.y + pB.y));
-            edges.Add(points.Count);
-            points.Add((pA + pB) * 0.5f);
-        }
+        
     }
 
-    private byte SampleImageData(NativeArray<byte> data, Vector2Int imageSize, Vector2 samplePoint, int imageChannels = 4, int channel = 0)
+    /*
+    /// <summary>
+    /// Will remove the point but maintain the loop
+    /// </summary>
+    private void RemovePointFromLoop(int pointIndex, ref List<Point2DLoop> loop)
+    {
+        var toRemovePoint = loop[pointIndex];
+        var connA = toRemovePoint.EdgeA;
+        var connB = toRemovePoint.EdgeB;
+        
+        RemoveConnectionFromPoint(connA, toRemovePoint);
+        RemoveConnectionFromPoint(connB, toRemovePoint);
+        
+        ConnectPointIfAvailable(connA, connB);
+        ConnectPointIfAvailable(connB, connA);
+        
+        loop.RemoveAt(pointIndex);
+    }
+
+    
+    private void RemoveConnectionFromPoint(Point2DLoop origin, Point2DLoop connected)
+    {
+        if (origin.EdgeA == connected)
+            origin.EdgeA = null;
+        
+        if (origin.EdgeB == connected)
+            origin.EdgeB = null;
+    }
+
+    private void ConnectPointIfAvailable(Point2DLoop origin, Point2DLoop candidate)
+    {
+        if (origin.EdgeA == null)
+        {
+            origin.EdgeA = candidate;
+            return;
+        }
+
+        origin.EdgeB ??= candidate;
+    }
+    */
+    
+    private byte SampleImageData(byte[] data, Vector2Int imageSize, Vector2 samplePoint, int imageChannels = 4, int channel = 0)
     {
         if(samplePoint.x < 0 || samplePoint.x >= imageSize.x ||
             samplePoint.y < 0 || samplePoint.y >= imageSize.y)
